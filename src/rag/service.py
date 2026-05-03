@@ -2,7 +2,11 @@
 
 import pandas as pd
 from typing import List
+import google.generativeai as genai
 from openai import AsyncOpenAI
+from groq import AsyncGroq
+from sentence_transformers import SentenceTransformer
+import numpy as np
 
 from src.api.config import settings
 from src.db.supabase import SupabaseService
@@ -14,19 +18,30 @@ class RAGService:
     def __init__(self):
         self.supabase = SupabaseService()
         self.openai_client = AsyncOpenAI(api_key=settings.OPENAI_API_KEY) if settings.OPENAI_API_KEY else None
-        self.embedding_model = "text-embedding-ada-002"
+        self.gemini_client = None
+        self.groq_client = None
+        self.embedding_model = "all-MiniLM-L6-v2"
         self.chat_model = "gpt-4"
+        
+        # Initialize local embeddings (force CPU to avoid CUDA issues)
+        self.embedding_model = SentenceTransformer('all-MiniLM-L6-v2', device='cpu')
+        
+        # Initialize Gemini if key is available
+        if settings.GEMINI_API_KEY:
+            genai.configure(api_key=settings.GEMINI_API_KEY)
+            self.gemini_client = genai.GenerativeModel('gemini-pro')
+            self.chat_model = "gemini-pro"
+        
+        # Initialize Groq if key is available
+        if settings.GROQ_API_KEY:
+            self.groq_client = AsyncGroq(api_key=settings.GROQ_API_KEY)
+            self.chat_model = "llama3-70b-8192"
     
     async def generate_embedding(self, text: str) -> List[float]:
         """Generate embedding vector for text."""
-        if not self.openai_client:
-            raise ValueError("OpenAI client not configured")
-        
-        response = await self.openai_client.embeddings.create(
-            model=self.embedding_model,
-            input=text,
-        )
-        return response.data[0].embedding
+        # Use local sentence-transformers for embeddings
+        embedding = self.embedding_model.encode(text)
+        return embedding.tolist()
     
     async def ingest_csv(self, file_path: str) -> int:
         """Ingest CSV file into vector database."""
@@ -69,34 +84,46 @@ class RAGService:
         ]
     
     async def generate_reply(self, email_content: str, sender: str, subject: str) -> dict:
-        """Generate AI reply using RAG."""
-        # Search knowledge base
+        """Generate AI reply for email."""
+        if not self.gemini_client and not self.openai_client and not self.groq_client:
+            raise ValueError("No LLM client configured")
+        
+        # Search for relevant documents
         search_query = f"Subject: {subject}\nBody: {email_content[:500]}"
         relevant_docs = await self.search(search_query, limit=3)
-        
-        # Build context
         context = self._build_context(relevant_docs)
         
-        # Generate reply with LLM
+        # Generate reply using LLM
         prompt = self._build_prompt(email_content, sender, subject, context)
         
-        if not self.openai_client:
-            raise ValueError("OpenAI client not configured")
-        
-        response = await self.openai_client.chat.completions.create(
-            model=self.chat_model,
-            messages=[
-                {
-                    "role": "system",
-                    "content": "You are a helpful assistant that replies to emails about courses and programs. Use the provided context to craft accurate, professional responses."
-                },
-                {"role": "user", "content": prompt}
-            ],
-            temperature=0.7,
-            max_tokens=1000,
-        )
-        
-        reply = response.choices[0].message.content
+        if self.groq_client:
+            # Use Groq
+            response = await self.groq_client.chat.completions.create(
+                model=self.chat_model,
+                messages=[
+                    {"role": "system", "content": "You are a helpful assistant that drafts email replies."},
+                    {"role": "user", "content": prompt}
+                ],
+                temperature=0.7,
+                max_tokens=1000
+            )
+            reply = response.choices[0].message.content
+        elif self.gemini_client:
+            # Use Gemini
+            response = self.gemini_client.generate_content(prompt)
+            reply = response.text
+        else:
+            # Use OpenAI
+            response = await self.openai_client.chat.completions.create(
+                model=self.chat_model,
+                messages=[
+                    {"role": "system", "content": "You are a helpful assistant that drafts email replies."},
+                    {"role": "user", "content": prompt}
+                ],
+                temperature=0.7,
+                max_tokens=1000
+            )
+            reply = response.choices[0].message.content
         
         return {
             "draft_content": reply,

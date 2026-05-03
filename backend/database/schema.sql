@@ -56,8 +56,8 @@ CREATE TABLE IF NOT EXISTS sent_emails (
 CREATE TABLE IF NOT EXISTS knowledge_vectors (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     content TEXT NOT NULL,
-    metadata JSONB DEFAULT '{}',
-    embedding VECTOR(1536),
+    metadata JSONB,
+    embedding VECTOR(384) NOT NULL,
     created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
 );
 
@@ -80,7 +80,7 @@ CREATE INDEX IF NOT EXISTS idx_feedback_sent_email_id ON feedback(sent_email_id)
 
 -- Create vector similarity search function
 CREATE OR REPLACE FUNCTION match_documents(
-    query_embedding VECTOR(1536),
+    query_embedding VECTOR(384),
     match_threshold FLOAT,
     match_count INT
 )
@@ -152,9 +152,18 @@ AS $$
     SELECT
         COUNT(*)::BIGINT as total_count,
         ROUND(AVG(f.star_rating), 2) as average_rating,
-        jsonb_object_agg(
-            COALESCE(f.star_rating::text, '0'),
-            COALESCE(counts.cnt, 0)
+        (
+            SELECT jsonb_object_agg(star_rating, rating_count)
+            FROM (
+                SELECT 
+                    f.star_rating::text as star_rating,
+                    COUNT(*) as rating_count
+                FROM feedback f
+                JOIN sent_emails se ON f.sent_email_id = se.id
+                JOIN emails e ON se.email_id = e.id
+                WHERE e.user_id = user_id
+                GROUP BY f.star_rating
+            ) rating_counts
         ) as distribution
     FROM feedback f
     JOIN sent_emails se ON f.sent_email_id = se.id

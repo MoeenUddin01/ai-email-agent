@@ -46,7 +46,7 @@ async def get_current_user_id(request: Request) -> str:
 
 
 @router.post("/ingest")
-async def ingest_csv(file: UploadFile = File(...), request: Request):
+async def ingest_csv(request: Request, file: UploadFile = File(...)):
     """Ingest a CSV file into the vector database."""
     user_id = await get_current_user_id(request)
     

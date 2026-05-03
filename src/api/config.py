@@ -20,6 +20,7 @@ class Settings(BaseSettings):
     # LLM API
     OPENAI_API_KEY: str | None = None
     GEMINI_API_KEY: str | None = None
+    GROQ_API_KEY: str | None = None
     
     # Authentication
     JWT_SECRET: str

@@ -5,11 +5,12 @@ AI-powered email reply agent for Gmail with RAG (Retrieval-Augmented Generation)
 ## Features
 
 - ✉️ **Gmail Integration**: Sync emails from Primary inbox
-- 🤖 **AI-Powered Replies**: Generate intelligent responses using OpenAI/Gemini
+- 🤖 **AI-Powered Replies**: Generate intelligent responses using Groq/OpenAI/Gemini
 - 📚 **RAG Pipeline**: Retrieve relevant context from your course/program knowledge base
 - ✏️ **Human-in-the-Loop**: Edit drafts before sending (never auto-sends)
 - ⭐ **Feedback System**: Rate replies and provide textual feedback
 - 🔐 **Secure**: Google OAuth authentication, owner-only access
+- 💾 **Local Embeddings**: Uses sentence-transformers for cost-effective vector storage
 
 ## Architecture
 
@@ -23,7 +24,8 @@ AI-powered email reply agent for Gmail with RAG (Retrieval-Augmented Generation)
                                ▼
                         ┌──────────────────┐
                         │   Gmail API      │
-                        │   OpenAI API     │
+                        │   Groq API       │
+                        │ Local Embeddings │
                         └──────────────────┘
 ```
 
@@ -32,8 +34,12 @@ AI-powered email reply agent for Gmail with RAG (Retrieval-Augmented Generation)
 ### 1. Clone & Install Dependencies
 
 ```bash
-# Backend dependencies
-pip install -e .
+# Clone repository
+git clone <repository-url>
+cd ai-email-agent
+
+# Install backend dependencies with uv
+uv sync
 
 # Frontend dependencies
 cd frontend
@@ -51,29 +57,37 @@ cp .env.example .env
 Required services:
 - **Supabase**: Create project, enable pgvector extension, run schema.sql
 - **Google Cloud**: Create OAuth 2.0 credentials for Gmail API
-- **OpenAI**: Get API key
+- **Groq**: Get API key (recommended) OR OpenAI/Gemini API keys
 
 ### 3. Database Setup
 
-Run the SQL schema in Supabase SQL Editor:
-
+1. **Enable pgvector extension** in Supabase SQL Editor:
 ```sql
--- Located at backend/database/schema.sql
+CREATE EXTENSION IF NOT EXISTS vector;
+```
+
+2. **Run the schema** (`backend/database/schema.sql`)
+
+3. **Ingest your knowledge base**:
+```bash
+cd backend/scripts
+uv run python ingest_csv.py --csv ../../data/vizaura_courses_dataset.csv
 ```
 
 ### 4. Run Development Servers
 
 ```bash
 # Terminal 1: Backend (from project root)
-uvicorn backend.src.app.main:app --reload
-
-# Or using the installed command (after pip install -e .)
-ai-email-agent
+uv run uvicorn src.api.main:app --reload --host 0.0.0.0 --port 8000
 
 # Terminal 2: Frontend
 cd frontend
 npm run dev
 ```
+
+Visit:
+- Backend API: `http://localhost:8000/docs`
+- Frontend: `http://localhost:3000`
 
 ## Project Structure
 
@@ -99,8 +113,9 @@ ai-email-agent/
 │   ├── database/
 │   │   └── schema.sql                # Database schema
 │   └── scripts/
-│       └── ingest_csv.py             # CSV ingestion tool
-├── frontend/
+│       ├── ingest_csv.py             # CSV ingestion tool
+│       └── migrate_embeddings.py     # Database migration tool
+├── frontend/                          # Frontend application (at root)
 │   ├── src/
 │   │   ├── app/
 │   │   │   ├── page.tsx        # Login page
@@ -112,10 +127,12 @@ ai-email-agent/
 │   │   └── utils/
 │   ├── package.json
 │   └── next.config.js
-├── data/
-│   └── knowledge_base.csv      # Your course/program data
-├── CLAUDE.md                   # Detailed specification
-└── README.md                   # This file
+├── data/                             # Data directory (at root)
+│   └── vizaura_courses_dataset.csv   # Your course/program data
+├── CLAUDE.md                         # Detailed specification
+├── README.md                         # This file
+├── pyproject.toml                    # Python project configuration
+└── .env.example                      # Environment variables template
 ```
 
 ## API Endpoints
@@ -154,12 +171,83 @@ ai-email-agent/
 
 ## Environment Variables
 
-See `.env.example` for all required variables.
+Create `.env` file with the following variables:
+
+```bash
+# Supabase
+SUPABASE_URL="https://your-project.supabase.co"
+SUPABASE_SERVICE_KEY="your-service-role-key"
+SUPABASE_ANON_KEY="your-anon-key"
+
+# Gmail API
+GMAIL_CLIENT_ID="your-client-id.apps.googleusercontent.com"
+GMAIL_CLIENT_SECRET="your-client-secret"
+GMAIL_REDIRECT_URI="http://localhost:8000/auth/gmail/callback"
+
+# LLM API (choose one or more)
+GROQ_API_KEY="gsk_your-groq-key"              # Recommended - fast & affordable
+OPENAI_API_KEY="sk-your-openai-key"            # Optional
+GEMINI_API_KEY="your-gemini-key"                # Optional
+
+# Authentication
+JWT_SECRET="your-jwt-secret"
+GOOGLE_CLIENT_ID="your-client-id.apps.googleusercontent.com"
+GOOGLE_CLIENT_SECRET="your-client-secret"
+
+# URLs
+BACKEND_URL="http://localhost:8000"
+FRONTEND_URL="http://localhost:3000"
+```
+
+### LLM Provider Options
+
+1. **Groq (Recommended)**: Fast, affordable, supports Llama3 models
+2. **OpenAI**: GPT-4, requires API key
+3. **Gemini**: Google's model, requires API key
+
+The system uses local sentence-transformers for embeddings (no API key needed).
+
+## Troubleshooting
+
+### Common Issues
+
+1. **CUDA errors during ingestion**: The system automatically uses CPU mode for embeddings
+2. **Dimension mismatch**: Run the migration script if switching between embedding providers
+3. **API key errors**: Ensure your LLM API key is valid and has sufficient quota
+4. **Database connection**: Verify Supabase URL and service key are correct
+
+### Migration Scripts
+
+If you need to update embeddings dimensions:
+```bash
+cd backend/scripts
+uv run python migrate_embeddings.py
+```
+
+## Development Status
+
+✅ **Completed Features:**
+- Backend API with FastAPI
+- RAG pipeline with local embeddings
+- Gmail integration
+- Supabase database with pgvector
+- Google OAuth authentication
+- CSV ingestion for knowledge base
+- Feedback system
+
+⬜ **Pending:**
+- Frontend Next.js application
+- End-to-end testing
+- Production deployment
 
 ## Deployment
 
 ### Backend (Railway)
 ```bash
+# Install Railway CLI
+npm install -g @railway/cli
+
+# Deploy
 railway login
 railway init
 railway up
@@ -167,8 +255,19 @@ railway up
 
 ### Frontend (Vercel)
 ```bash
+# Install Vercel CLI
+npm install -g vercel
+
+# Deploy
+cd frontend
 vercel --prod
 ```
+
+### Environment Setup for Production
+
+1. Set all environment variables in Railway dashboard
+2. Update redirect URIs in Google Cloud Console
+3. Configure Supabase RLS policies for production
 
 ## License
 
