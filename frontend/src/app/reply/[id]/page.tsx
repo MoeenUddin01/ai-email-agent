@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import { useRouter, useParams } from "next/navigation";
 import { ArrowLeft, Send, Sparkles, Loader2 } from "lucide-react";
+import { supabase } from "@/utils/supabase";
 
 interface Draft {
   id: string;
@@ -37,12 +38,18 @@ export default function ReplyPage() {
   const generateDraft = async () => {
     setGenerating(true);
     try {
-      const token = localStorage.getItem("token");
+      const sessionToken = (await supabase.auth.getSession()).data.session?.access_token;
+      if (!sessionToken) {
+        console.error("No authentication token found");
+        router.push("/");
+        return;
+      }
+      
       const response = await fetch(
         `${process.env.NEXT_PUBLIC_BACKEND_URL}/emails/${emailId}/process`,
         {
           method: "POST",
-          headers: { Authorization: `Bearer ${token}` },
+          headers: { Authorization: `Bearer ${sessionToken}` },
         }
       );
 
@@ -51,7 +58,7 @@ export default function ReplyPage() {
         const draftResponse = await fetch(
           `${process.env.NEXT_PUBLIC_BACKEND_URL}/drafts/${emailId}`,
           {
-            headers: { Authorization: `Bearer ${token}` },
+            headers: { Authorization: `Bearer ${sessionToken}` },
           }
         );
 
@@ -74,14 +81,19 @@ export default function ReplyPage() {
 
     setSending(true);
     try {
-      const token = localStorage.getItem("token");
+      const sessionToken = (await supabase.auth.getSession()).data.session?.access_token;
+      if (!sessionToken) {
+        console.error("No authentication token found");
+        return;
+      }
+      
       const response = await fetch(
         `${process.env.NEXT_PUBLIC_BACKEND_URL}/drafts/send`,
         {
           method: "POST",
           headers: {
             "Content-Type": "application/json",
-            Authorization: `Bearer ${token}`,
+            Authorization: `Bearer ${sessionToken}`,
           },
           body: JSON.stringify({
             draft_id: draft.id,
@@ -104,7 +116,7 @@ export default function ReplyPage() {
 
   const submitFeedback = async () => {
     try {
-      const token = localStorage.getItem("token");
+      const sessionToken = (await supabase.auth.getSession()).data.session?.access_token;
       // TODO: Get sent_email_id from response
       router.push("/inbox");
     } catch (error) {
