@@ -49,15 +49,22 @@ export default function Home() {
   }, [router]);
 
   const handleLogin = async () => {
-    const { error } = await supabase.auth.signInWithOAuth({
+    console.log('Starting Google OAuth flow...');
+    console.log('Supabase URL:', process.env.NEXT_PUBLIC_SUPABASE_URL);
+    console.log('Redirect URI:', `${process.env.NEXT_PUBLIC_FRONTEND_URL || 'http://localhost:3000'}/auth/callback`);
+    
+    const { data, error } = await supabase.auth.signInWithOAuth({
       provider: 'google',
       options: {
-        redirectTo: `${process.env.NEXT_PUBLIC_FRONTEND_URL || 'http://localhost:3006'}/auth/callback`
+        redirectTo: `${process.env.NEXT_PUBLIC_FRONTEND_URL || 'http://localhost:3000'}/auth/callback`
       }
     });
     
     if (error) {
       console.error('Error signing in:', error);
+      console.error('Error details:', JSON.stringify(error, null, 2));
+    } else {
+      console.log('OAuth URL generated:', data.url);
     }
   };
 
