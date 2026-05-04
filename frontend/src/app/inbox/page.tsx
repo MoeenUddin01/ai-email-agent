@@ -19,6 +19,7 @@ export default function Inbox() {
   const router = useRouter();
   const [emails, setEmails] = useState<Email[]>([]);
   const [loading, setLoading] = useState(true);
+  const [syncing, setSyncing] = useState(false);
   const [selectedEmail, setSelectedEmail] = useState<Email | null>(null);
 
   useEffect(() => {
@@ -53,6 +54,55 @@ export default function Inbox() {
       console.error("Failed to fetch emails:", error);
     } finally {
       setLoading(false);
+    }
+  };
+
+  const syncEmails = async () => {
+    setSyncing(true);
+    try {
+      const sessionToken = (await supabase.auth.getSession()).data.session?.access_token;
+      if (!sessionToken) {
+        alert("No authentication token found. Please login again.");
+        return;
+      }
+      
+      console.log("Starting Gmail sync...");
+      const response = await fetch(
+        `${process.env.NEXT_PUBLIC_BACKEND_URL}/emails/sync`,
+        {
+          method: "POST",
+          headers: { Authorization: `Bearer ${sessionToken}` },
+        }
+      );
+      
+      if (response.ok) {
+        const data = await response.json();
+        console.log("Sync response:", data);
+        
+        if (data.status === "gmail_not_connected") {
+          alert("Gmail not connected. Please connect your Gmail account first.");
+        } else if (data.status === "gmail_not_configured") {
+          alert("Gmail integration is not yet configured. This feature is coming soon!");
+        } else if (data.status === "success") {
+          alert(`Sync completed! ${data.new_emails || 0} new emails synced.`);
+          // Refresh emails after sync
+          await fetchEmails();
+        } else if (data.status === "error") {
+          alert(`Sync failed: ${data.detail || 'Unknown error'}`);
+        } else {
+          alert("Sync completed. Refreshing emails...");
+          await fetchEmails();
+        }
+      } else {
+        const errorData = await response.json();
+        console.error("Sync failed:", errorData);
+        alert(`Sync failed: ${errorData.detail || 'Unknown error'}`);
+      }
+    } catch (error) {
+      console.error("Failed to sync emails:", error);
+      alert("Failed to sync emails. Please check console for details.");
+    } finally {
+      setSyncing(false);
     }
   };
 
@@ -103,11 +153,24 @@ export default function Inbox() {
               <Mail className="w-12 h-12 mx-auto mb-4 text-gray-300" />
               <p>No emails yet</p>
               <button
-                onClick={fetchEmails}
-                className="mt-4 text-blue-600 hover:underline"
+                onClick={syncEmails}
+                disabled={syncing}
+                className="mt-4 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:bg-blue-400 disabled:cursor-not-allowed flex items-center gap-2 mx-auto"
               >
-                Sync from Gmail
+                {syncing ? (
+                  <>
+                    <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white"></div>
+                    Syncing from Gmail...
+                  </>
+                ) : (
+                  "Sync from Gmail"
+                )}
               </button>
+              {syncing && (
+                <p className="mt-2 text-sm text-gray-400">
+                  Checking your Gmail account for emails...
+                </p>
+              )}
             </div>
           ) : (
             emails.map((email) => (

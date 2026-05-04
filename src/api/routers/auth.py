@@ -21,7 +21,7 @@ async def verify_supabase_token(token: str) -> dict | None:
     """Verify Supabase JWT token."""
     try:
         supabase = create_client(settings.SUPABASE_URL, settings.SUPABASE_SERVICE_KEY)
-        response = await httpx.get(
+        response = await httpx.AsyncClient().get(
             f"{settings.SUPABASE_URL}/auth/v1/user",
             headers={
                 "Authorization": f"Bearer {token}",
@@ -34,6 +34,10 @@ async def verify_supabase_token(token: str) -> dict | None:
         return None
     except Exception:
         return None
+
+
+# Alias for backwards compatibility
+verify_token = verify_supabase_token
 
 
 @router.get("/me", response_model=UserProfile)

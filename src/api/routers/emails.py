@@ -9,6 +9,7 @@ from src.db.supabase import SupabaseService
 from src.email.gmail import GmailService
 from src.rag.service import RAGService
 from src.api.routers.auth import verify_token
+from src.db.supabase import get_supabase_client
 
 router = APIRouter()
 
@@ -30,18 +31,18 @@ class EmailListResponse(BaseModel):
 
 
 async def get_current_user_id(request: Request) -> str:
-    """Extract and verify user from JWT token."""
+    """Extract user ID from JWT token."""
     auth_header = request.headers.get("authorization")
     if not auth_header or not auth_header.startswith("Bearer "):
         raise HTTPException(status_code=401, detail="Not authenticated")
     
     token = auth_header.split(" ")[1]
-    payload = verify_token(token)
+    payload = await verify_token(token)
     
     if not payload:
         raise HTTPException(status_code=401, detail="Invalid token")
     
-    return payload["sub"]
+    return payload["id"]
 
 
 @router.get("/", response_model=EmailListResponse)
@@ -86,8 +87,97 @@ async def sync_emails(request: Request):
     """Sync emails from Gmail API."""
     user_id = await get_current_user_id(request)
     
-    # TODO: Implement Gmail sync logic
-    return {"message": "Sync initiated", "user_id": user_id}
+    try:
+        # Check if user has Gmail credentials stored
+        supabase = get_supabase_client()
+        
+        try:
+            credentials_result = supabase.table("user_credentials").select("*").eq("user_id", user_id).eq("provider", "gmail").execute()
+            
+            if not credentials_result.data:
+                return {
+                    "message": "Gmail not connected",
+                    "detail": "Please connect your Gmail account first",
+                    "user_id": user_id,
+                    "status": "gmail_not_connected"
+                }
+        except Exception as table_error:
+            # Table doesn't exist or other database issue
+            print(f"Database table error: {table_error}")
+            return {
+                "message": "Gmail integration not set up",
+                "detail": "Gmail integration is not yet configured. Please contact support.",
+                "user_id": user_id,
+                "status": "gmail_not_configured"
+            }
+        
+        # Get Gmail credentials
+        credentials_data = credentials_result.data[0]
+        
+        # Create Gmail service with stored credentials
+        from google.oauth2.credentials import Credentials
+        gmail_credentials = Credentials(
+            token=credentials_data.get('access_token'),
+            refresh_token=credentials_data.get('refresh_token'),
+            token_uri="https://oauth2.googleapis.com/token",
+            client_id=settings.GMAIL_CLIENT_ID,
+            client_secret=settings.GMAIL_CLIENT_SECRET,
+            scopes=GmailService.SCOPES
+        )
+        
+        gmail_service = GmailService(gmail_credentials)
+        
+        # Fetch emails from Gmail
+        emails = await gmail_service.fetch_emails(max_results=50)
+        
+        # Store emails in database
+        supabase_service = SupabaseService(user_id)
+        stored_emails = []
+        
+        for email_data in emails:
+            try:
+                # Check if email already exists
+                existing = supabase.table("emails").select("*").eq("gmail_id", email_data['id']).eq("user_id", user_id).execute()
+                
+                if not existing.data:
+                    # Store new email
+                    email_record = {
+                        "gmail_id": email_data['id'],
+                        "thread_id": email_data['thread_id'],
+                        "user_id": user_id,
+                        "sender": email_data['sender'],
+                        "subject": email_data['subject'],
+                        "body_text": email_data['body_text'],
+                        "received_at": email_data['received_at'],
+                        "status": "unread"
+                    }
+                    
+                    result = supabase.table("emails").insert(email_record).execute()
+                    if result.data:
+                        stored_emails.append(result.data[0])
+                else:
+                    stored_emails.append(existing.data[0])
+                    
+            except Exception as e:
+                print(f"Error storing email {email_data.get('id', 'unknown')}: {e}")
+                continue
+        
+        return {
+            "message": f"Sync completed successfully",
+            "user_id": user_id,
+            "emails_synced": len(stored_emails),
+            "new_emails": len([e for e in stored_emails if e.get('status') == 'unread']),
+            "status": "success"
+        }
+        
+    except Exception as e:
+        print(f"Gmail sync error: {e}")
+        return {
+            "message": "Sync failed",
+            "detail": str(e),
+            "user_id": user_id,
+            "status": "error"
+        }
 
 
 @router.post("/{email_id}/process")
