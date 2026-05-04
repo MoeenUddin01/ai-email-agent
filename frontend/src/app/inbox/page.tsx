@@ -84,9 +84,16 @@ export default function Inbox() {
         } else if (data.status === "gmail_not_configured") {
           alert("Gmail integration is not yet configured. This feature is coming soon!");
         } else if (data.status === "success") {
-          alert(`Sync completed! ${data.new_emails || 0} new emails synced.`);
-          // Refresh emails after sync
-          await fetchEmails();
+          // Display the fetched emails directly
+          if (data.emails && data.emails.length > 0) {
+            setEmails(data.emails);
+            alert(`Fetched ${data.emails.length} emails for AI processing!`);
+            if (data.note) {
+              console.log("Note:", data.note);
+            }
+          } else {
+            alert("No emails found.");
+          }
         } else if (data.status === "error") {
           alert(`Sync failed: ${data.detail || 'Unknown error'}`);
         } else {

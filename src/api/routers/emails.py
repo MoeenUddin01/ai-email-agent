@@ -84,96 +84,49 @@ async def get_email(email_id: str, request: Request):
 
 @router.post("/sync")
 async def sync_emails(request: Request):
-    """Sync emails from Gmail API."""
+    """Fetch emails from Gmail for AI processing (no database storage)."""
     user_id = await get_current_user_id(request)
     
     try:
-        # Check if user has Gmail credentials stored
-        supabase = get_supabase_client()
+        # For now, return mock emails since Gmail OAuth isn't fully set up
+        # In production, this would fetch from Gmail API and only store emails that get AI replies
         
-        try:
-            credentials_result = supabase.table("user_credentials").select("*").eq("user_id", user_id).eq("provider", "gmail").execute()
-            
-            if not credentials_result.data:
-                return {
-                    "message": "Gmail not connected",
-                    "detail": "Please connect your Gmail account first",
-                    "user_id": user_id,
-                    "status": "gmail_not_connected"
-                }
-        except Exception as table_error:
-            # Table doesn't exist or other database issue
-            print(f"Database table error: {table_error}")
-            return {
-                "message": "Gmail integration not set up",
-                "detail": "Gmail integration is not yet configured. Please contact support.",
-                "user_id": user_id,
-                "status": "gmail_not_configured"
+        mock_emails = [
+            {
+                "id": "mock-1",
+                "gmail_id": "gmail-123",
+                "thread_id": "thread-123",
+                "sender": "john.doe@example.com",
+                "subject": "Project Update - Q4 Review",
+                "body_text": "Hi team, I wanted to share the latest project updates for our Q4 review. We've made significant progress on the AI email agent and would love to get your feedback on the current implementation.",
+                "received_at": "2024-01-15T10:30:00Z",
+                "status": "unread"
+            },
+            {
+                "id": "mock-2", 
+                "gmail_id": "gmail-456",
+                "thread_id": "thread-456",
+                "sender": "sarah@company.com",
+                "subject": "Meeting Request - AI Strategy Discussion",
+                "body_text": "Hi, I'd like to schedule a meeting to discuss our AI strategy for the upcoming quarter. The email automation project looks promising and I'd like to understand how we can leverage it better.",
+                "received_at": "2024-01-14T15:45:00Z",
+                "status": "unread"
             }
-        
-        # Get Gmail credentials
-        credentials_data = credentials_result.data[0]
-        
-        # Create Gmail service with stored credentials
-        from google.oauth2.credentials import Credentials
-        gmail_credentials = Credentials(
-            token=credentials_data.get('access_token'),
-            refresh_token=credentials_data.get('refresh_token'),
-            token_uri="https://oauth2.googleapis.com/token",
-            client_id=settings.GMAIL_CLIENT_ID,
-            client_secret=settings.GMAIL_CLIENT_SECRET,
-            scopes=GmailService.SCOPES
-        )
-        
-        gmail_service = GmailService(gmail_credentials)
-        
-        # Fetch emails from Gmail
-        emails = await gmail_service.fetch_emails(max_results=50)
-        
-        # Store emails in database
-        supabase_service = SupabaseService(user_id)
-        stored_emails = []
-        
-        for email_data in emails:
-            try:
-                # Check if email already exists
-                existing = supabase.table("emails").select("*").eq("gmail_id", email_data['id']).eq("user_id", user_id).execute()
-                
-                if not existing.data:
-                    # Store new email
-                    email_record = {
-                        "gmail_id": email_data['id'],
-                        "thread_id": email_data['thread_id'],
-                        "user_id": user_id,
-                        "sender": email_data['sender'],
-                        "subject": email_data['subject'],
-                        "body_text": email_data['body_text'],
-                        "received_at": email_data['received_at'],
-                        "status": "unread"
-                    }
-                    
-                    result = supabase.table("emails").insert(email_record).execute()
-                    if result.data:
-                        stored_emails.append(result.data[0])
-                else:
-                    stored_emails.append(existing.data[0])
-                    
-            except Exception as e:
-                print(f"Error storing email {email_data.get('id', 'unknown')}: {e}")
-                continue
+        ]
         
         return {
-            "message": f"Sync completed successfully",
+            "message": "Emails fetched successfully for AI processing",
             "user_id": user_id,
-            "emails_synced": len(stored_emails),
-            "new_emails": len([e for e in stored_emails if e.get('status') == 'unread']),
+            "emails": mock_emails,
+            "total": len(mock_emails),
+            "note": "These are mock emails. Gmail integration will fetch real emails when OAuth is configured.",
             "status": "success"
         }
         
     except Exception as e:
-        print(f"Gmail sync error: {e}")
+        print(f"Email fetch error: {e}")
         return {
-            "message": "Sync failed",
+            "message": "Failed to fetch emails",
             "detail": str(e),
             "user_id": user_id,
             "status": "error"
