@@ -5,10 +5,12 @@ FastAPI application for Gmail integration, RAG, and AI reply generation.
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.staticfiles import StaticFiles
+from fastapi.responses import FileResponse
 from contextlib import asynccontextmanager
 import uvicorn
 
-from src.api.routers import auth, emails, drafts, feedback, knowledge
+from src.api.routers import auth, emails, drafts, feedback, knowledge, health
 from src.api.config import settings
 
 
@@ -42,20 +44,22 @@ app.include_router(emails.router, prefix="/emails", tags=["Emails"])
 app.include_router(drafts.router, prefix="/drafts", tags=["AI Drafts"])
 app.include_router(feedback.router, prefix="/feedback", tags=["Feedback"])
 app.include_router(knowledge.router, prefix="/knowledge", tags=["Knowledge Base"])
+app.include_router(health.router, tags=["Health"])
+
+# Mount static files
+app.mount("/static", StaticFiles(directory="src/api/static"), name="static")
 
 
 @app.get("/")
 async def root():
-    return {
-        "message": "AI Email Agent API",
-        "version": "0.1.0",
-        "docs": "/docs",
-    }
+    """Serve the attractive landing page."""
+    return FileResponse("src/api/static/index.html")
 
 
 @app.get("/health")
 async def health_check():
-    return {"status": "healthy"}
+    """Simple health check for load balancers."""
+    return {"status": "healthy", "timestamp": "2024-01-01T00:00:00Z"}
 
 
 def main():

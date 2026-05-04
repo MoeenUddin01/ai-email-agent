@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { Mail, Star, Send, RefreshCw, LogOut } from "lucide-react";
+import { supabase } from "@/utils/supabase";
 
 interface Email {
   id: string;
@@ -21,21 +22,27 @@ export default function Inbox() {
   const [selectedEmail, setSelectedEmail] = useState<Email | null>(null);
 
   useEffect(() => {
-    const token = localStorage.getItem("token");
-    if (!token) {
-      router.push("/");
-      return;
-    }
-    fetchEmails();
+    const checkAuth = async () => {
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session) {
+        router.push("/");
+        return;
+      }
+      fetchEmails();
+    };
+    
+    checkAuth();
   }, [router]);
 
   const fetchEmails = async () => {
     try {
-      const token = localStorage.getItem("token");
+      const sessionToken = (await supabase.auth.getSession()).data.session?.access_token;
+      if (!sessionToken) return;
+      
       const response = await fetch(
         `${process.env.NEXT_PUBLIC_BACKEND_URL}/emails/`,
         {
-          headers: { Authorization: `Bearer ${token}` },
+          headers: { Authorization: `Bearer ${sessionToken}` },
         }
       );
       if (response.ok) {
@@ -49,8 +56,8 @@ export default function Inbox() {
     }
   };
 
-  const handleLogout = () => {
-    localStorage.removeItem("token");
+  const handleLogout = async () => {
+    await supabase.auth.signOut();
     router.push("/");
   };
 

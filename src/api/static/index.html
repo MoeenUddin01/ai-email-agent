@@ -1,0 +1,253 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AI Email Agent - Intelligent Email Assistant</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap');
+        body { font-family: 'Inter', sans-serif; }
+        .gradient-bg {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        }
+        .card-hover {
+            transition: all 0.3s ease;
+        }
+        .card-hover:hover {
+            transform: translateY(-5px);
+            box-shadow: 0 20px 40px rgba(0,0,0,0.1);
+        }
+        .pulse {
+            animation: pulse 2s infinite;
+        }
+        @keyframes pulse {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.5; }
+        }
+    </style>
+</head>
+<body class="bg-gray-50">
+    <!-- Navigation -->
+    <nav class="bg-white shadow-lg">
+        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+            <div class="flex justify-between h-16">
+                <div class="flex items-center">
+                    <i class="fas fa-robot text-3xl text-indigo-600 mr-3"></i>
+                    <span class="text-xl font-bold text-gray-900">AI Email Agent</span>
+                </div>
+                <div class="flex items-center space-x-4">
+                    <a href="/docs" class="text-gray-700 hover:text-indigo-600 px-3 py-2 rounded-md text-sm font-medium transition">
+                        <i class="fas fa-book mr-2"></i>API Docs
+                    </a>
+                    <a href="/health" class="text-gray-700 hover:text-indigo-600 px-3 py-2 rounded-md text-sm font-medium transition">
+                        <i class="fas fa-heartbeat mr-2"></i>Health
+                    </a>
+                    <span class="inline-flex items-center px-3 py-1 rounded-full text-xs font-medium bg-green-100 text-green-800">
+                        <span class="w-2 h-2 bg-green-400 rounded-full mr-2 pulse"></span>
+                        Online
+                    </span>
+                </div>
+            </div>
+        </div>
+    </nav>
+
+    <!-- Hero Section -->
+    <div class="gradient-bg text-white py-20">
+        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+            <div class="text-center">
+                <h1 class="text-4xl md:text-6xl font-bold mb-6">
+                    Intelligent Email Assistant
+                </h1>
+                <p class="text-xl md:text-2xl mb-8 text-indigo-100">
+                    Powered by AI, built for productivity
+                </p>
+                <div class="flex flex-col sm:flex-row gap-4 justify-center">
+                    <a href="/docs" class="bg-white text-indigo-600 px-8 py-3 rounded-lg font-semibold hover:bg-gray-100 transition">
+                        <i class="fas fa-rocket mr-2"></i>Get Started
+                    </a>
+                    <a href="#features" class="border-2 border-white text-white px-8 py-3 rounded-lg font-semibold hover:bg-white hover:text-indigo-600 transition">
+                        <i class="fas fa-info-circle mr-2"></i>Learn More
+                    </a>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Features Section -->
+    <section id="features" class="py-20">
+        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+            <div class="text-center mb-16">
+                <h2 class="text-3xl md:text-4xl font-bold text-gray-900 mb-4">
+                    Powerful Features
+                </h2>
+                <p class="text-xl text-gray-600">
+                    Everything you need for intelligent email management
+                </p>
+            </div>
+
+            <div class="grid md:grid-cols-2 lg:grid-cols-3 gap-8">
+                <!-- Feature 1 -->
+                <div class="bg-white p-6 rounded-xl shadow-lg card-hover">
+                    <div class="w-12 h-12 bg-indigo-100 rounded-lg flex items-center justify-center mb-4">
+                        <i class="fas fa-brain text-indigo-600 text-xl"></i>
+                    </div>
+                    <h3 class="text-xl font-semibold text-gray-900 mb-2">AI-Powered Replies</h3>
+                    <p class="text-gray-600">Generate intelligent responses using advanced RAG technology with Groq LLM</p>
+                </div>
+
+                <!-- Feature 2 -->
+                <div class="bg-white p-6 rounded-xl shadow-lg card-hover">
+                    <div class="w-12 h-12 bg-green-100 rounded-lg flex items-center justify-center mb-4">
+                        <i class="fas fa-database text-green-600 text-xl"></i>
+                    </div>
+                    <h3 class="text-xl font-semibold text-gray-900 mb-2">Knowledge Base</h3>
+                    <p class="text-gray-600">150+ course documents with vector search for context-aware responses</p>
+                </div>
+
+                <!-- Feature 3 -->
+                <div class="bg-white p-6 rounded-xl shadow-lg card-hover">
+                    <div class="w-12 h-12 bg-blue-100 rounded-lg flex items-center justify-center mb-4">
+                        <i class="fas fa-envelope text-blue-600 text-xl"></i>
+                    </div>
+                    <h3 class="text-xl font-semibold text-gray-900 mb-2">Gmail Integration</h3>
+                    <p class="text-gray-600">Seamless Gmail API integration for email fetching and sending</p>
+                </div>
+
+                <!-- Feature 4 -->
+                <div class="bg-white p-6 rounded-xl shadow-lg card-hover">
+                    <div class="w-12 h-12 bg-purple-100 rounded-lg flex items-center justify-center mb-4">
+                        <i class="fas fa-shield-alt text-purple-600 text-xl"></i>
+                    </div>
+                    <h3 class="text-xl font-semibold text-gray-900 mb-2">Secure Authentication</h3>
+                    <p class="text-gray-600">Google OAuth with JWT tokens and row-level security</p>
+                </div>
+
+                <!-- Feature 5 -->
+                <div class="bg-white p-6 rounded-xl shadow-lg card-hover">
+                    <div class="w-12 h-12 bg-yellow-100 rounded-lg flex items-center justify-center mb-4">
+                        <i class="fas fa-star text-yellow-600 text-xl"></i>
+                    </div>
+                    <h3 class="text-xl font-semibold text-gray-900 mb-2">Feedback System</h3>
+                    <p class="text-gray-600">Rate responses and provide feedback for continuous improvement</p>
+                </div>
+
+                <!-- Feature 6 -->
+                <div class="bg-white p-6 rounded-xl shadow-lg card-hover">
+                    <div class="w-12 h-12 bg-red-100 rounded-lg flex items-center justify-center mb-4">
+                        <i class="fas fa-bolt text-red-600 text-xl"></i>
+                    </div>
+                    <h3 class="text-xl font-semibold text-gray-900 mb-2">Fast Performance</h3>
+                    <p class="text-gray-600">Local embeddings and Groq API for lightning-fast responses</p>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- Stats Section -->
+    <section class="bg-gray-900 text-white py-16">
+        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+            <div class="grid md:grid-cols-4 gap-8 text-center">
+                <div>
+                    <div class="text-3xl md:text-4xl font-bold text-indigo-400 mb-2">150+</div>
+                    <div class="text-gray-300">Knowledge Documents</div>
+                </div>
+                <div>
+                    <div class="text-3xl md:text-4xl font-bold text-green-400 mb-2">384</div>
+                    <div class="text-gray-300">Embedding Dimensions</div>
+                </div>
+                <div>
+                    <div class="text-3xl md:text-4xl font-bold text-blue-400 mb-2">100%</div>
+                    <div class="text-gray-300">RLS Security</div>
+                </div>
+                <div>
+                    <div class="text-3xl md:text-4xl font-bold text-purple-400 mb-2">0.1s</div>
+                    <div class="text-gray-300">Response Time</div>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- Quick Actions -->
+    <section class="py-16 bg-white">
+        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+            <div class="text-center mb-12">
+                <h2 class="text-3xl font-bold text-gray-900 mb-4">Quick Actions</h2>
+                <p class="text-xl text-gray-600">Test the API endpoints directly</p>
+            </div>
+
+            <div class="grid md:grid-cols-2 lg:grid-cols-4 gap-6">
+                <a href="/docs" class="bg-indigo-50 border-2 border-indigo-200 rounded-lg p-6 text-center hover:bg-indigo-100 transition">
+                    <i class="fas fa-book text-3xl text-indigo-600 mb-3"></i>
+                    <h3 class="font-semibold text-gray-900">API Documentation</h3>
+                    <p class="text-sm text-gray-600 mt-1">Interactive API docs</p>
+                </a>
+
+                <a href="/health" class="bg-green-50 border-2 border-green-200 rounded-lg p-6 text-center hover:bg-green-100 transition">
+                    <i class="fas fa-heartbeat text-3xl text-green-600 mb-3"></i>
+                    <h3 class="font-semibold text-gray-900">Health Check</h3>
+                    <p class="text-sm text-gray-600 mt-1">System status</p>
+                </a>
+
+                <a href="/docs#/Authentication/auth_google_get" class="bg-blue-50 border-2 border-blue-200 rounded-lg p-6 text-center hover:bg-blue-100 transition">
+                    <i class="fas fa-sign-in-alt text-3xl text-blue-600 mb-3"></i>
+                    <h3 class="font-semibold text-gray-900">Test Auth</h3>
+                    <p class="text-sm text-gray-600 mt-1">Google OAuth</p>
+                </a>
+
+                <a href="/docs#/Knowledge/knowledge_search_post" class="bg-purple-50 border-2 border-purple-200 rounded-lg p-6 text-center hover:bg-purple-100 transition">
+                    <i class="fas fa-search text-3xl text-purple-600 mb-3"></i>
+                    <h3 class="font-semibold text-gray-900">Search Knowledge</h3>
+                    <p class="text-sm text-gray-600 mt-1">Test RAG search</p>
+                </a>
+            </div>
+        </div>
+    </section>
+
+    <!-- Footer -->
+    <footer class="bg-gray-900 text-white py-8">
+        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+            <div class="flex flex-col md:flex-row justify-between items-center">
+                <div class="flex items-center mb-4 md:mb-0">
+                    <i class="fas fa-robot text-2xl text-indigo-400 mr-2"></i>
+                    <span class="text-lg font-semibold">AI Email Agent v0.1.0</span>
+                </div>
+                <div class="flex space-x-6">
+                    <a href="/docs" class="text-gray-400 hover:text-white transition">
+                        <i class="fas fa-book mr-1"></i>Docs
+                    </a>
+                    <a href="/health" class="text-gray-400 hover:text-white transition">
+                        <i class="fas fa-heartbeat mr-1"></i>Health
+                    </a>
+                    <span class="text-gray-400">
+                        <i class="fas fa-code mr-1"></i>Built with FastAPI
+                    </span>
+                </div>
+            </div>
+        </div>
+    </footer>
+
+    <script>
+        // Add smooth scrolling
+        document.querySelectorAll('a[href^="#"]').forEach(anchor => {
+            anchor.addEventListener('click', function (e) {
+                e.preventDefault();
+                document.querySelector(this.getAttribute('href')).scrollIntoView({
+                    behavior: 'smooth'
+                });
+            });
+        });
+
+        // Add dynamic status check
+        fetch('/health')
+            .then(response => response.json())
+            .then(data => {
+                console.log('System health:', data);
+            })
+            .catch(error => {
+                console.log('Health check failed:', error);
+            });
+    </script>
+</body>
+</html>

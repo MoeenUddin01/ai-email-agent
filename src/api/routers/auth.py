@@ -1,23 +1,13 @@
-"""Authentication router for Google OAuth."""
+"""Authentication router for Supabase Auth."""
 
-from fastapi import APIRouter, HTTPException, Response, Request
-from fastapi.responses import RedirectResponse
+from fastapi import APIRouter, HTTPException, Request
 from pydantic import BaseModel
-from datetime import datetime, timedelta
-from jose import jwt, JWTError
 import httpx
+from supabase import create_client
 
 from src.api.config import settings
 
 router = APIRouter()
-
-JWT_ALGORITHM = "HS256"
-ACCESS_TOKEN_EXPIRE_DAYS = 7
-
-
-class TokenResponse(BaseModel):
-    access_token: str
-    token_type: str = "bearer"
 
 
 class UserProfile(BaseModel):
@@ -27,76 +17,23 @@ class UserProfile(BaseModel):
     picture: str | None = None
 
 
-def create_access_token(data: dict, expires_delta: timedelta | None = None) -> str:
-    """Create JWT access token."""
-    to_encode = data.copy()
-    expire = datetime.utcnow() + (expires_delta or timedelta(days=ACCESS_TOKEN_EXPIRE_DAYS))
-    to_encode.update({"exp": expire})
-    return jwt.encode(to_encode, settings.JWT_SECRET, algorithm=JWT_ALGORITHM)
-
-
-def verify_token(token: str) -> dict | None:
-    """Verify and decode JWT token."""
+async def verify_supabase_token(token: str) -> dict | None:
+    """Verify Supabase JWT token."""
     try:
-        payload = jwt.decode(token, settings.JWT_SECRET, algorithms=[JWT_ALGORITHM])
-        return payload
-    except JWTError:
-        return None
-
-
-@router.get("/google")
-async def google_login():
-    """Initiate Google OAuth login."""
-    google_auth_url = (
-        "https://accounts.google.com/o/oauth2/v2/auth"
-        f"?client_id={settings.GOOGLE_CLIENT_ID}"
-        f"&redirect_uri={settings.BACKEND_URL}/auth/google/callback"
-        f"&response_type=code"
-        f"&scope=openid email profile"
-        f"&access_type=offline"
-    )
-    return RedirectResponse(url=google_auth_url)
-
-
-@router.get("/google/callback")
-async def google_callback(code: str, response: Response):
-    """Handle Google OAuth callback."""
-    token_url = "https://oauth2.googleapis.com/token"
-    token_data = {
-        "code": code,
-        "client_id": settings.GOOGLE_CLIENT_ID,
-        "client_secret": settings.GOOGLE_CLIENT_SECRET,
-        "redirect_uri": f"{settings.BACKEND_URL}/auth/google/callback",
-        "grant_type": "authorization_code",
-    }
-    
-    async with httpx.AsyncClient() as client:
-        token_response = await client.post(token_url, data=token_data)
-        if token_response.status_code != 200:
-            raise HTTPException(status_code=400, detail="Failed to get access token")
-        
-        tokens = token_response.json()
-        access_token = tokens.get("access_token")
-        
-        user_response = await client.get(
-            "https://www.googleapis.com/oauth2/v2/userinfo",
-            headers={"Authorization": f"Bearer {access_token}"}
+        supabase = create_client(settings.SUPABASE_URL, settings.SUPABASE_SERVICE_KEY)
+        response = await httpx.get(
+            f"{settings.SUPABASE_URL}/auth/v1/user",
+            headers={
+                "Authorization": f"Bearer {token}",
+                "apikey": settings.SUPABASE_SERVICE_KEY
+            }
         )
-        if user_response.status_code != 200:
-            raise HTTPException(status_code=400, detail="Failed to get user info")
         
-        user_info = user_response.json()
-    
-    user_data = {
-        "sub": user_info["id"],
-        "email": user_info["email"],
-        "name": user_info.get("name"),
-        "picture": user_info.get("picture"),
-    }
-    jwt_token = create_access_token(user_data)
-    
-    frontend_callback = f"{settings.FRONTEND_URL}/auth/callback?token={jwt_token}"
-    return RedirectResponse(url=frontend_callback)
+        if response.status_code == 200:
+            return response.json()
+        return None
+    except Exception:
+        return None
 
 
 @router.get("/me", response_model=UserProfile)
@@ -107,14 +44,14 @@ async def get_current_user(request: Request):
         raise HTTPException(status_code=401, detail="Not authenticated")
     
     token = auth_header.split(" ")[1]
-    payload = verify_token(token)
+    user_data = await verify_supabase_token(token)
     
-    if not payload:
+    if not user_data:
         raise HTTPException(status_code=401, detail="Invalid token")
     
     return UserProfile(
-        id=payload["sub"],
-        email=payload["email"],
-        name=payload.get("name"),
-        picture=payload.get("picture"),
+        id=user_data["id"],
+        email=user_data["email"],
+        name=user_data.get("user_metadata", {}).get("full_name"),
+        picture=user_data.get("user_metadata", {}).get("avatar_url"),
     )

@@ -1,21 +1,31 @@
 "use client";
 
 import { useEffect } from "react";
-import { useRouter, useSearchParams } from "next/navigation";
+import { useRouter } from "next/navigation";
+import { supabase } from "@/utils/supabase";
 
 export default function AuthCallback() {
   const router = useRouter();
-  const searchParams = useSearchParams();
 
   useEffect(() => {
-    const token = searchParams.get("token");
-    if (token) {
-      localStorage.setItem("token", token);
-      router.push("/inbox");
-    } else {
-      router.push("/");
-    }
-  }, [searchParams, router]);
+    const handleAuthCallback = async () => {
+      const { data, error } = await supabase.auth.getSession();
+      
+      if (error) {
+        console.error('Error during auth callback:', error);
+        router.push("/");
+        return;
+      }
+
+      if (data.session) {
+        router.push("/inbox");
+      } else {
+        router.push("/");
+      }
+    };
+
+    handleAuthCallback();
+  }, [router]);
 
   return (
     <div className="min-h-screen flex items-center justify-center">

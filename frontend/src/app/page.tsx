@@ -2,23 +2,63 @@
 
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
+import { supabase } from "@/utils/supabase";
+import { User } from "@supabase/supabase-js";
 
 export default function Home() {
   const router = useRouter();
   const [isLoading, setIsLoading] = useState(true);
+  const [user, setUser] = useState<User | null>(null);
 
   useEffect(() => {
     // Check if user is authenticated
-    const token = localStorage.getItem("token");
-    if (token) {
-      router.push("/inbox");
-    } else {
-      setIsLoading(false);
-    }
+    const checkAuth = async () => {
+      try {
+        const { data: { user }, error } = await supabase.auth.getUser();
+        if (error) {
+          console.error('Auth error:', error);
+          setIsLoading(false);
+          return;
+        }
+        if (user) {
+          setUser(user);
+          router.push("/inbox");
+        } else {
+          setIsLoading(false);
+        }
+      } catch (err) {
+        console.error('Auth check error:', err);
+        setIsLoading(false);
+      }
+    };
+
+    checkAuth();
+
+    // Listen for auth changes
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
+      if (event === 'SIGNED_IN' && session?.user) {
+        setUser(session.user);
+        router.push("/inbox");
+      } else if (event === 'SIGNED_OUT') {
+        setUser(null);
+        setIsLoading(false);
+      }
+    });
+
+    return () => subscription.unsubscribe();
   }, [router]);
 
-  const handleLogin = () => {
-    window.location.href = `${process.env.NEXT_PUBLIC_BACKEND_URL}/auth/google`;
+  const handleLogin = async () => {
+    const { error } = await supabase.auth.signInWithOAuth({
+      provider: 'google',
+      options: {
+        redirectTo: `${process.env.NEXT_PUBLIC_FRONTEND_URL || 'http://localhost:3006'}/auth/callback`
+      }
+    });
+    
+    if (error) {
+      console.error('Error signing in:', error);
+    }
   };
 
   if (isLoading) {

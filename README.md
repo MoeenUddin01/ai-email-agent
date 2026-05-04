@@ -9,8 +9,9 @@ AI-powered email reply agent for Gmail with RAG (Retrieval-Augmented Generation)
 - 📚 **RAG Pipeline**: Retrieve relevant context from your course/program knowledge base
 - ✏️ **Human-in-the-Loop**: Edit drafts before sending (never auto-sends)
 - ⭐ **Feedback System**: Rate replies and provide textual feedback
-- 🔐 **Secure**: Google OAuth authentication, owner-only access
+- 🔐 **Secure Authentication**: Supabase Auth with Google OAuth integration
 - 💾 **Local Embeddings**: Uses sentence-transformers for cost-effective vector storage
+- 🎨 **Modern UI**: Next.js frontend with Tailwind CSS
 
 ## Architecture
 
@@ -55,8 +56,8 @@ cp .env.example .env
 ```
 
 Required services:
-- **Supabase**: Create project, enable pgvector extension, run schema.sql
-- **Google Cloud**: Create OAuth 2.0 credentials for Gmail API
+- **Supabase**: Create project, enable pgvector extension, run schema.sql, configure Auth with Google provider
+- **Google Cloud**: Create OAuth 2.0 credentials for Gmail API and Supabase Auth
 - **Groq**: Get API key (recommended) OR OpenAI/Gemini API keys
 
 ### 3. Database Setup
@@ -74,7 +75,25 @@ cd backend/scripts
 uv run python ingest_csv.py --csv ../../data/vizaura_courses_dataset.csv
 ```
 
-### 4. Run Development Servers
+### 4. Configure Supabase Auth
+
+1. **Go to your Supabase project**: Authentication → Providers
+2. **Enable Google provider** with your OAuth credentials
+3. **Update redirect URI** in Google Cloud Console to:
+   ```
+   https://your-project.supabase.co/auth/v1/callback
+   ```
+
+### 5. Frontend Environment Setup
+
+Create `frontend/.env.local` with:
+```bash
+NEXT_PUBLIC_SUPABASE_URL="https://your-project.supabase.co"
+NEXT_PUBLIC_SUPABASE_ANON_KEY="your-anon-key"
+NEXT_PUBLIC_BACKEND_URL="http://localhost:8000"
+```
+
+### 6. Run Development Servers
 
 ```bash
 # Terminal 1: Backend (from project root)
@@ -96,7 +115,7 @@ ai-email-agent/
 ├── src/                               # Main source code
 │   ├── api/                           # FastAPI application
 │   │   ├── routers/
-│   │   │   ├── auth.py               # Google OAuth
+│   │   │   ├── auth.py               # Supabase Auth verification
 │   │   │   ├── emails.py             # Email management
 │   │   │   ├── drafts.py             # AI draft generation
 │   │   │   ├── feedback.py           # Rating system
@@ -118,13 +137,19 @@ ai-email-agent/
 ├── frontend/                          # Frontend application (at root)
 │   ├── src/
 │   │   ├── app/
-│   │   │   ├── page.tsx        # Login page
+│   │   │   ├── page.tsx              # Login page with Supabase Auth
+│   │   │   ├── auth/
+│   │   │   │   └── callback/
+│   │   │   │       └── page.tsx      # Auth callback handler
 │   │   │   ├── inbox/
-│   │   │   │   └── page.tsx    # Email list
+│   │   │   │   └── page.tsx          # Email list
 │   │   │   └── reply/
 │   │   │       └── [id]/
-│   │   │           └── page.tsx # Reply editor
-│   │   └── utils/
+│   │   │           └── page.tsx      # Reply editor
+│   │   ├── utils/
+│   │   │   └── supabase.ts           # Supabase client
+│   │   └── types/
+│   ├── .env.local                     # Frontend environment variables
 │   ├── package.json
 │   └── next.config.js
 ├── data/                             # Data directory (at root)
@@ -138,9 +163,7 @@ ai-email-agent/
 ## API Endpoints
 
 ### Authentication
-- `GET /auth/google` - Initiate Google OAuth
-- `GET /auth/google/callback` - OAuth callback
-- `GET /auth/me` - Get current user
+- `GET /auth/me` - Get current user (Supabase Auth verification)
 
 ### Emails
 - `GET /emails/` - List emails
@@ -159,7 +182,7 @@ ai-email-agent/
 
 ## Workflow
 
-1. User authenticates via Google OAuth
+1. User authenticates via Supabase Auth (Google OAuth)
 2. Emails are synced from Gmail to Supabase
 3. User selects an email to reply to
 4. System retrieves relevant docs via RAG
@@ -189,10 +212,8 @@ GROQ_API_KEY="gsk_your-groq-key"              # Recommended - fast & affordable
 OPENAI_API_KEY="sk-your-openai-key"            # Optional
 GEMINI_API_KEY="your-gemini-key"                # Optional
 
-# Authentication
+# Authentication (for Supabase Auth verification)
 JWT_SECRET="your-jwt-secret"
-GOOGLE_CLIENT_ID="your-client-id.apps.googleusercontent.com"
-GOOGLE_CLIENT_SECRET="your-client-secret"
 
 # URLs
 BACKEND_URL="http://localhost:8000"
@@ -231,12 +252,13 @@ uv run python migrate_embeddings.py
 - RAG pipeline with local embeddings
 - Gmail integration
 - Supabase database with pgvector
-- Google OAuth authentication
+- Supabase Auth with Google OAuth
 - CSV ingestion for knowledge base
 - Feedback system
+- Next.js frontend with modern UI
+- Complete authentication flow
 
 ⬜ **Pending:**
-- Frontend Next.js application
 - End-to-end testing
 - Production deployment
 

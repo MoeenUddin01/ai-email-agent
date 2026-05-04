@@ -5,7 +5,7 @@ from pydantic import BaseModel
 from typing import List, Optional
 from datetime import datetime
 
-from src.db.supabase import get_supabase_client
+from src.db.supabase import SupabaseService
 from src.email.gmail import GmailService
 from src.rag.service import RAGService
 from src.api.routers.auth import verify_token
@@ -71,9 +71,9 @@ async def list_emails(
 async def get_email(email_id: str, request: Request):
     """Get a specific email by ID."""
     user_id = await get_current_user_id(request)
-    supabase = get_supabase_client()
+    supabase = SupabaseService(user_id)
     
-    result = supabase.table("emails").select("*").eq("id", email_id).eq("user_id", user_id).single().execute()
+    result = supabase._get_client().table("emails").select("*").eq("id", email_id).eq("user_id", user_id).single().execute()
     
     if not result.data:
         raise HTTPException(status_code=404, detail="Email not found")

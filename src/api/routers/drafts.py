@@ -5,7 +5,7 @@ from pydantic import BaseModel
 from typing import Optional
 from datetime import datetime
 
-from src.db.supabase import get_supabase_client
+from src.db.supabase import SupabaseService
 from src.rag.service import RAGService
 from src.email.gmail import GmailService
 from src.api.routers.auth import verify_token
@@ -59,9 +59,9 @@ async def get_current_user_id(request: Request) -> str:
 async def get_draft(email_id: str, request: Request):
     """Get AI draft for a specific email."""
     user_id = await get_current_user_id(request)
-    supabase = get_supabase_client()
+    supabase = SupabaseService(user_id)
     
-    result = supabase.table("ai_drafts").select("*").eq("email_id", email_id).order("created_at", desc=True).limit(1).execute()
+    result = supabase._get_client().table("ai_drafts").select("*").eq("email_id", email_id).order("created_at", desc=True).limit(1).execute()
     
     if not result.data:
         raise HTTPException(status_code=404, detail="Draft not found")
