@@ -2,7 +2,6 @@
 
 import pandas as pd
 from typing import List
-import google.generativeai as genai
 from openai import AsyncOpenAI
 from groq import AsyncGroq
 from sentence_transformers import SentenceTransformer
@@ -26,11 +25,13 @@ class RAGService:
         # Initialize local embeddings (force CPU to avoid CUDA issues)
         self.embedding_model = SentenceTransformer('all-MiniLM-L6-v2', device='cpu')
         
-        # Initialize Gemini if key is available
+        # Initialize Gemini using OpenAI-compatible API
         if settings.GEMINI_API_KEY:
-            genai.configure(api_key=settings.GEMINI_API_KEY)
-            self.gemini_client = genai.GenerativeModel('gemini-pro')
-            self.chat_model = "gemini-pro"
+            self.gemini_client = AsyncOpenAI(
+                api_key=settings.GEMINI_API_KEY,
+                base_url="https://generativelanguage.googleapis.com/v1beta/openai/"
+            )
+            self.chat_model = "gemini-2.0-flash"
         
         # Initialize Groq if key is available
         if settings.GROQ_API_KEY:
@@ -85,49 +86,75 @@ class RAGService:
     
     async def generate_reply(self, email_content: str, sender: str, subject: str) -> dict:
         """Generate AI reply for email."""
+        print(f"DEBUG: RAG service - checking LLM clients...")
+        print(f"DEBUG: Gemini client (OpenAI-compatible): {self.gemini_client is not None}")
+        print(f"DEBUG: OpenAI client: {self.openai_client is not None}")
+        print(f"DEBUG: Groq client: {self.groq_client is not None}")
+        
         if not self.gemini_client and not self.openai_client and not self.groq_client:
-            raise ValueError("No LLM client configured")
+            print("DEBUG: No LLM client configured - returning mock response")
+            # Return a mock response for testing when no LLM is configured
+            return {
+                "draft_content": f"Hi {sender},\n\nThank you for your email regarding: {subject}\n\nThis is a mock AI-generated reply. The system is working but needs LLM API keys configured to generate real responses.\n\nBest regards,\nAI Email Agent",
+                "model_used": "mock",
+                "retrieved_context": {
+                    "documents": [],
+                    "context_text": "No context available - mock response",
+                },
+            }
         
         # Search for relevant documents
+        print("DEBUG: Searching for relevant documents...")
         search_query = f"Subject: {subject}\nBody: {email_content[:500]}"
         relevant_docs = await self.search(search_query, limit=3)
         context = self._build_context(relevant_docs)
+        print(f"DEBUG: Found {len(relevant_docs)} relevant documents")
         
         # Generate reply using LLM
+        print("DEBUG: Building prompt and generating reply...")
         prompt = self._build_prompt(email_content, sender, subject, context)
         
-        if self.groq_client:
-            # Use Groq
-            response = await self.groq_client.chat.completions.create(
-                model=self.chat_model,
-                messages=[
-                    {"role": "system", "content": "You are a helpful assistant that drafts email replies."},
-                    {"role": "user", "content": prompt}
-                ],
-                temperature=0.7,
-                max_tokens=1000
-            )
-            reply = response.choices[0].message.content
-        elif self.gemini_client:
-            # Use Gemini
-            response = self.gemini_client.generate_content(prompt)
-            reply = response.text
-        else:
-            # Use OpenAI
-            response = await self.openai_client.chat.completions.create(
-                model=self.chat_model,
-                messages=[
-                    {"role": "system", "content": "You are a helpful assistant that drafts email replies."},
-                    {"role": "user", "content": prompt}
-                ],
-                temperature=0.7,
-                max_tokens=1000
-            )
-            reply = response.choices[0].message.content
+        reply = None
+        model_used = None
+        errors = []
+        
+        # Try providers in order: Groq (user has key) -> OpenAI -> Gemini
+        providers = [
+            ("groq", self.groq_client, "llama3-70b-8192"),
+            ("openai", self.openai_client, "gpt-4"),
+            ("gemini", self.gemini_client, "gemini-2.0-flash"),
+        ]
+        
+        for provider_name, client, model in providers:
+            if not client:
+                continue
+            try:
+                print(f"DEBUG: Trying {provider_name} with model {model}...")
+                response = await client.chat.completions.create(
+                    model=model,
+                    messages=[
+                        {"role": "system", "content": "You are a helpful assistant that drafts email replies."},
+                        {"role": "user", "content": prompt}
+                    ],
+                    temperature=0.7,
+                    max_tokens=1000
+                )
+                reply = response.choices[0].message.content
+                model_used = model
+                print(f"DEBUG: Successfully generated reply using {provider_name}")
+                break
+            except Exception as e:
+                error_msg = str(e)
+                print(f"DEBUG: {provider_name} failed: {error_msg[:100]}...")
+                errors.append(f"{provider_name}: {error_msg[:100]}")
+                continue
+        
+        if not reply:
+            raise Exception(f"All LLM providers failed: {'; '.join(errors)}")
         
         return {
             "draft_content": reply,
-            "model_used": self.chat_model,
+            "model_used": model_used,
             "retrieved_context": {
                 "documents": relevant_docs,
                 "context_text": context,
