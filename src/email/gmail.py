@@ -1,10 +1,10 @@
 """Gmail API service."""
 
 import base64
+import requests
 from typing import List, Optional
 from datetime import datetime
 from google.oauth2.credentials import Credentials
-from google_auth_oauthlib.flow import Flow
 from googleapiclient.discovery import build
 
 from src.api.config import settings
@@ -19,6 +19,10 @@ class GmailService:
         'https://www.googleapis.com/auth/gmail.modify',
     ]
     
+    # Google OAuth endpoints
+    AUTH_URI = "https://accounts.google.com/o/oauth2/auth"
+    TOKEN_URI = "https://oauth2.googleapis.com/token"
+
     def __init__(self, credentials: Optional[Credentials] = None):
         self.credentials = credentials
         self.service = None
@@ -26,40 +30,50 @@ class GmailService:
             self.service = build('gmail', 'v1', credentials=credentials)
     
     def get_auth_url(self) -> str:
-        """Get Google OAuth authorization URL."""
-        flow = Flow.from_client_config(
-            {
-                "web": {
-                    "client_id": settings.GMAIL_CLIENT_ID,
-                    "client_secret": settings.GMAIL_CLIENT_SECRET,
-                    "auth_uri": "https://accounts.google.com/o/oauth2/auth",
-                    "token_uri": "https://oauth2.googleapis.com/token",
-                    "redirect_uris": [settings.GMAIL_REDIRECT_URI],
-                }
-            },
-            scopes=self.SCOPES,
-        )
-        flow.redirect_uri = settings.GMAIL_REDIRECT_URI
-        auth_url, _ = flow.authorization_url(prompt='consent', access_type='offline')
-        return auth_url
+        """Get Google OAuth authorization URL (no PKCE)."""
+        from urllib.parse import urlencode
+        params = {
+            "client_id": settings.GMAIL_CLIENT_ID,
+            "redirect_uri": settings.GMAIL_REDIRECT_URI,
+            "response_type": "code",
+            "scope": " ".join(self.SCOPES),
+            "access_type": "offline",
+            "prompt": "consent",
+        }
+        return f"{self.AUTH_URI}?{urlencode(params)}"
     
     def exchange_code(self, code: str) -> Credentials:
-        """Exchange authorization code for credentials."""
-        flow = Flow.from_client_config(
-            {
-                "web": {
+        """Exchange authorization code for credentials (no PKCE)."""
+        print(f"Exchanging code: {code[:10]}...")  # Debug log
+        print(f"Redirect URI: {settings.GMAIL_REDIRECT_URI}")  # Debug log
+        try:
+            response = requests.post(
+                self.TOKEN_URI,
+                data={
+                    "code": code,
                     "client_id": settings.GMAIL_CLIENT_ID,
                     "client_secret": settings.GMAIL_CLIENT_SECRET,
-                    "auth_uri": "https://accounts.google.com/o/oauth2/auth",
-                    "token_uri": "https://oauth2.googleapis.com/token",
-                    "redirect_uris": [settings.GMAIL_REDIRECT_URI],
-                }
-            },
-            scopes=self.SCOPES,
-        )
-        flow.redirect_uri = settings.GMAIL_REDIRECT_URI
-        flow.fetch_token(code=code)
-        return flow.credentials
+                    "redirect_uri": settings.GMAIL_REDIRECT_URI,
+                    "grant_type": "authorization_code",
+                },
+            )
+            response.raise_for_status()
+            token_data = response.json()
+            print(f"Token exchange successful")  # Debug log
+
+            credentials = Credentials(
+                token=token_data["access_token"],
+                refresh_token=token_data.get("refresh_token"),
+                token_uri=self.TOKEN_URI,
+                client_id=settings.GMAIL_CLIENT_ID,
+                client_secret=settings.GMAIL_CLIENT_SECRET,
+                scopes=self.SCOPES,
+            )
+            return credentials
+        except Exception as e:
+            print(f"Token exchange error: {e}")
+            print(f"Error type: {type(e)}")
+            raise e
     
     async def fetch_emails(self, max_results: int = 50, query: str = "label:inbox") -> List[dict]:
         """Fetch emails from Gmail."""

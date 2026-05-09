@@ -4,6 +4,7 @@ from fastapi import APIRouter, HTTPException, Request
 from pydantic import BaseModel
 from typing import List, Optional
 from datetime import datetime
+from google.oauth2.credentials import Credentials
 
 from src.db.supabase import SupabaseService
 from src.email.gmail import GmailService
@@ -33,6 +34,7 @@ class EmailListResponse(BaseModel):
 async def get_current_user_id(request: Request) -> str:
     """Extract user ID from JWT token."""
     auth_header = request.headers.get("authorization")
+    print(f"[Auth] authorization header present: {bool(auth_header)}, value prefix: {str(auth_header)[:30] if auth_header else 'NONE'}")
     if not auth_header or not auth_header.startswith("Bearer "):
         raise HTTPException(status_code=401, detail="Not authenticated")
     
@@ -82,55 +84,106 @@ async def get_email(email_id: str, request: Request):
     return Email(**result.data)
 
 
+
 @router.post("/sync")
 async def sync_emails(request: Request):
     """Fetch emails from Gmail for AI processing (no database storage)."""
     user_id = await get_current_user_id(request)
+    supabase = get_supabase_client()
     
     try:
-        # For now, return mock emails since Gmail OAuth isn't fully set up
-        # In production, this would fetch from Gmail API and only store emails that get AI replies
+        credentials_result = supabase.table("gmail_credentials").select("*").eq("user_id", user_id).single().execute()
         
-        mock_emails = [
-            {
-                "id": "mock-1",
-                "gmail_id": "gmail-123",
-                "thread_id": "thread-123",
-                "sender": "john.doe@example.com",
-                "subject": "Project Update - Q4 Review",
-                "body_text": "Hi team, I wanted to share the latest project updates for our Q4 review. We've made significant progress on the AI email agent and would love to get your feedback on the current implementation.",
-                "received_at": "2024-01-15T10:30:00Z",
-                "status": "unread"
-            },
-            {
-                "id": "mock-2", 
-                "gmail_id": "gmail-456",
-                "thread_id": "thread-456",
-                "sender": "sarah@company.com",
-                "subject": "Meeting Request - AI Strategy Discussion",
-                "body_text": "Hi, I'd like to schedule a meeting to discuss our AI strategy for the upcoming quarter. The email automation project looks promising and I'd like to understand how we can leverage it better.",
-                "received_at": "2024-01-14T15:45:00Z",
-                "status": "unread"
+        if not credentials_result.data:
+            return {
+                "message": "Gmail not connected",
+                "detail": "Please connect your Gmail account first",
+                "user_id": user_id,
+                "status": "gmail_not_connected"
             }
-        ]
+        
+        creds_data = credentials_result.data
+        credentials = Credentials(
+            token=creds_data["access_token"],
+            refresh_token=creds_data["refresh_token"],
+            token_uri=creds_data["token_uri"],
+            client_id=creds_data["client_id"],
+            client_secret=creds_data["client_secret"],
+            scopes=creds_data["scopes"]
+        )
+        
+        gmail_service = GmailService(credentials)
+        emails_data = await gmail_service.fetch_emails(max_results=50)
+        
+        formatted_emails = []
+        for i, email_data in enumerate(emails_data):
+            formatted_emails.append({
+                "id": f"gmail-{i}",
+                "gmail_id": email_data["gmail_id"],
+                "thread_id": email_data["thread_id"],
+                "sender": email_data["sender"],
+                "subject": email_data["subject"],
+                "body_text": email_data["body_text"],
+                "received_at": email_data["received_at"],
+                "status": "unread"
+            })
         
         return {
-            "message": "Emails fetched successfully for AI processing",
+            "message": "Emails fetched successfully from Gmail",
             "user_id": user_id,
-            "emails": mock_emails,
-            "total": len(mock_emails),
-            "note": "These are mock emails. Gmail integration will fetch real emails when OAuth is configured.",
+            "emails": formatted_emails,
+            "total": len(formatted_emails),
             "status": "success"
         }
         
     except Exception as e:
         print(f"Gmail sync error: {e}")
+        import traceback
+        traceback.print_exc()
+        
+        if "invalid_grant" in str(e) or "unauthorized" in str(e).lower():
+            return {
+                "message": "Gmail authorization expired",
+                "detail": "Please reconnect your Gmail account",
+                "user_id": user_id,
+                "status": "gmail_expired"
+            }
+        
         return {
             "message": "Sync failed",
             "detail": str(e),
             "user_id": user_id,
             "status": "error"
         }
+
+
+class DirectProcessRequest(BaseModel):
+    sender: str
+    subject: str
+    body_text: str
+
+
+@router.post("/process-direct")
+async def process_email_direct(body: DirectProcessRequest, request: Request):
+    """Generate an AI draft for an email provided directly in the request body."""
+    await get_current_user_id(request)  # ensure authenticated
+    rag_service = RAGService()
+    try:
+        draft_result = await rag_service.generate_reply(
+            email_content=body.body_text,
+            sender=body.sender,
+            subject=body.subject,
+        )
+        return {
+            "draft_content": draft_result["draft_content"],
+            "model_used": draft_result["model_used"],
+            "retrieved_context": draft_result.get("retrieved_context"),
+        }
+    except Exception as e:
+        print(f"Direct process error: {e}")
+        import traceback
+        traceback.print_exc()
+        raise HTTPException(status_code=500, detail=f"Failed to generate draft: {str(e)}")
 
 
 @router.post("/{email_id}/process")

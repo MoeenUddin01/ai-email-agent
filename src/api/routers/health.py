@@ -1,8 +1,8 @@
 """Health check and system status router."""
 
-from fastapi import APIRouter
+from fastapi import APIRouter, Request
 from pydantic import BaseModel
-from typing import Dict, Any
+from typing import Dict, Any, Optional
 import psutil
 import time
 from datetime import datetime
@@ -10,6 +10,7 @@ from datetime import datetime
 from src.db.supabase import get_supabase_client
 from src.rag.service import RAGService
 from src.api.config import settings
+from src.api.routers.auth import verify_supabase_token
 
 router = APIRouter()
 
@@ -166,6 +167,47 @@ def check_authentication() -> Dict[str, Any]:
             "auth_type": "custom_jwt"
         }
     }
+
+
+@router.get("/gmail-status")
+async def gmail_status(request: Request):
+    """Check if the current user has Gmail connected."""
+    auth_header = request.headers.get("authorization")
+    if not auth_header or not auth_header.startswith("Bearer "):
+        return {"connected": False}
+
+    token = auth_header.split(" ")[1]
+    user_data = await verify_supabase_token(token)
+    if not user_data:
+        return {"connected": False}
+
+    try:
+        client = get_supabase_client()
+        result = (
+            client.table("gmail_credentials")
+            .select("*")
+            .eq("user_id", user_data["id"])
+            .execute()
+        )
+        if result.data:
+            creds = result.data[0]
+            # Try to get the Gmail user's email via the People API
+            gmail_email: Optional[str] = None
+            try:
+                import requests as req
+                r = req.get(
+                    "https://www.googleapis.com/oauth2/v2/userinfo",
+                    headers={"Authorization": f"Bearer {creds['access_token']}"},
+                    timeout=4,
+                )
+                if r.status_code == 200:
+                    gmail_email = r.json().get("email")
+            except Exception:
+                pass
+            return {"connected": True, "gmail_email": gmail_email}
+        return {"connected": False}
+    except Exception:
+        return {"connected": False}
 
 
 @router.get("/status")

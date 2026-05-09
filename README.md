@@ -11,7 +11,8 @@ AI-powered email reply agent for Gmail with RAG (Retrieval-Augmented Generation)
 - ⭐ **Feedback System**: Rate replies and provide textual feedback
 - 🔐 **Secure Authentication**: Supabase Auth with Google OAuth integration
 - 💾 **Local Embeddings**: Uses sentence-transformers for cost-effective vector storage
-- 🎨 **Modern UI**: Next.js frontend with Tailwind CSS
+- 🎨 **Premium Dark UI**: Modern Next.js frontend with Tailwind CSS and glassmorphism effects
+- ⚡ **Persistent State**: Emails cached in `sessionStorage` for instant navigation without re-syncing
 
 ## Architecture
 
@@ -222,7 +223,7 @@ FRONTEND_URL="http://localhost:3000"
 
 ### LLM Provider Options
 
-1. **Groq (Recommended)**: Fast, affordable, supports Llama3 models
+1. **Groq (Recommended)**: Fast, affordable, defaults to `llama-3.3-70b-versatile`
 2. **OpenAI**: GPT-4, requires API key
 3. **Gemini**: Google's model, requires API key
 
@@ -259,7 +260,7 @@ uv run python migrate_embeddings.py
 - Complete authentication flow
 
 ⬜ **Pending:**
-- End-to-end testing
+- End-to-end testing (Completed)
 - Production deployment
 
 ## Deployment

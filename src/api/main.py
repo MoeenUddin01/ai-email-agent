@@ -44,7 +44,7 @@ app.include_router(emails.router, prefix="/emails", tags=["Emails"])
 app.include_router(drafts.router, prefix="/drafts", tags=["AI Drafts"])
 app.include_router(feedback.router, prefix="/feedback", tags=["Feedback"])
 app.include_router(knowledge.router, prefix="/knowledge", tags=["Knowledge Base"])
-app.include_router(health.router, tags=["Health"])
+app.include_router(health.router, prefix="/health", tags=["Health"])
 
 # Mount static files
 app.mount("/static", StaticFiles(directory="src/api/static"), name="static")
@@ -56,10 +56,10 @@ async def root():
     return FileResponse("src/api/static/index.html")
 
 
-@app.get("/health")
-async def health_check():
-    """Simple health check for load balancers."""
-    return {"status": "healthy", "timestamp": "2024-01-01T00:00:00Z"}
+@app.get("/ping")
+async def ping():
+    """Simple ping for load balancers."""
+    return {"status": "ok"}
 
 
 def main():

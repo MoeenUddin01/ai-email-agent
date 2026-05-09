@@ -15,7 +15,7 @@ class Settings(BaseSettings):
     # Gmail API
     GMAIL_CLIENT_ID: str
     GMAIL_CLIENT_SECRET: str
-    GMAIL_REDIRECT_URI: str = "http://localhost:8000/auth/gmail/callback"
+    GMAIL_REDIRECT_URI: str = "http://localhost:3000/auth/gmail/callback"
     
     # LLM API
     OPENAI_API_KEY: str | None = None

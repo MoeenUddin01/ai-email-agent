@@ -16,7 +16,9 @@ class RAGService:
     
     def __init__(self):
         self.supabase = SupabaseService()
-        self.openai_client = AsyncOpenAI(api_key=settings.OPENAI_API_KEY) if settings.OPENAI_API_KEY else None
+        # Only initialise OpenAI client if the key looks real
+        real_openai_key = settings.OPENAI_API_KEY and not settings.OPENAI_API_KEY.startswith("sk-your")
+        self.openai_client = AsyncOpenAI(api_key=settings.OPENAI_API_KEY) if real_openai_key else None
         self.gemini_client = None
         self.groq_client = None
         self.embedding_model = "all-MiniLM-L6-v2"
@@ -36,7 +38,7 @@ class RAGService:
         # Initialize Groq if key is available
         if settings.GROQ_API_KEY:
             self.groq_client = AsyncGroq(api_key=settings.GROQ_API_KEY)
-            self.chat_model = "llama3-70b-8192"
+            self.chat_model = "llama-3.3-70b-versatile"
     
     async def generate_embedding(self, text: str) -> List[float]:
         """Generate embedding vector for text."""
@@ -120,7 +122,7 @@ class RAGService:
         
         # Try providers in order: Groq (user has key) -> OpenAI -> Gemini
         providers = [
-            ("groq", self.groq_client, "llama3-70b-8192"),
+            ("groq", self.groq_client, "llama-3.3-70b-versatile"),
             ("openai", self.openai_client, "gpt-4"),
             ("gemini", self.gemini_client, "gemini-2.0-flash"),
         ]
