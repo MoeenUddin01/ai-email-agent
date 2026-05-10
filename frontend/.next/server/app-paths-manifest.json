@@ -1,6 +1,0 @@
-{
-  "/page": "app/page.js",
-  "/inbox/page": "app/inbox/page.js",
-  "/reply/[id]/page": "app/reply/[id]/page.js",
-  "/auth/gmail/callback/page": "app/auth/gmail/callback/page.js"
-}
