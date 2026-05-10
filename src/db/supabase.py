@@ -71,7 +71,7 @@ class SupabaseService:
             "match_documents",
             {
                 "query_embedding": query_embedding,
-                "match_threshold": 0.7,
+                "match_threshold": 0.3,
                 "match_count": limit,
             }
         ).execute()
