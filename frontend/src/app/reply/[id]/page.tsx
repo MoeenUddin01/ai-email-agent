@@ -123,14 +123,27 @@ export default function ReplyPage() {
     try {
       const token = await getToken();
       if (!token) return;
+      const stored = sessionStorage.getItem("ai_agent_email_data");
+      const emailData = stored ? JSON.parse(stored) : null;
       const res = await fetch(`${process.env.NEXT_PUBLIC_BACKEND_URL}/drafts/send`, {
         method: "POST",
         headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
-        body: JSON.stringify({ email_id: emailId, final_content: editedContent }),
+        body: JSON.stringify({
+          email_id: emailId,
+          final_content: editedContent,
+          recipient: emailData?.sender || "",
+          subject: emailData?.subject || "",
+        }),
       });
-      if (res.ok) setSent(true);
-    } catch {
-      setError("Failed to send. Please try again.");
+      if (res.ok) {
+        setSent(true);
+      } else {
+        let detail = `Error ${res.status}`;
+        try { const err = await res.json(); detail = err.detail || detail; } catch { /* ignore */ }
+        setError(`Failed to send: ${detail}`);
+      }
+    } catch (e) {
+      setError(`Network error: ${String(e)}`);
     } finally {
       setSending(false);
     }

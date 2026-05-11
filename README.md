@@ -223,7 +223,7 @@ ai-email-agent/
 ### Drafts
 - `GET /drafts/{email_id}` - Get AI draft for an email
 - `POST /drafts/{email_id}/regenerate` - Regenerate draft
-- `POST /drafts/send` - Send approved draft (`{draft_id, email_id, final_content}`)
+- `POST /drafts/send` - Send approved draft (`{email_id, final_content, recipient?, subject?, draft_id?}`)
 
 ### Feedback
 - `POST /feedback/` - Submit rating (1-5) and optional text feedback
@@ -251,7 +251,7 @@ ai-email-agent/
 6. AI generates draft reply with context (Groq → OpenAI → Gemini fallback)
 7. User reviews and edits the draft in the reply editor
 8. User clicks "Approve & Send"
-9. Email sent via Gmail API; original draft + final version stored in Supabase
+9. Email sent via Gmail API with proper `recipient` and `subject`; `recipient`/`subject` auto-populated from sessionStorage if email not persisted in DB; placeholder email record created with UUID if needed (handles both UUID and Gmail message ID as `email_id`)
 10. User provides star rating (1-5) and optional text feedback
 
 ## Environment Variables
@@ -309,6 +309,11 @@ Embeddings always use local **`all-MiniLM-L6-v2`** (384 dimensions) via `sentenc
 2. **Dimension mismatch**: Run the migration script if switching between embedding providers
 3. **API key errors**: Ensure your LLM API key is valid and has sufficient quota
 4. **Database connection**: Verify Supabase URL and service key are correct
+5. **Send fails with CORS + 500**: Check backend log for exact error. Common causes:
+   - `get_supabase_client` not imported in `drafts.py`
+   - `public.users` table empty — user auto-created in send flow, but ensure Supabase Auth user exists
+   - `sent_emails.email_id` expects UUID but Gmail message ID passed — backend auto-resolves by `gmail_id`
+6. **Email stored but not delivered ("Recipient address required")**: Frontend must pass `recipient` and `subject` in send request. Backend updates existing email records if they have empty `sender`/`subject`
 
 ### Migration Scripts
 
@@ -361,6 +366,7 @@ node debug-auth.js
 - Health dashboard with system metrics
 - LLM provider fallback (Groq → OpenAI → Gemini)
 - Database migration scripts for all tables
+- Send flow with auto-user/email creation, UUID resolution, recipient/subject passthrough
 
 ⬜ **Pending:**
 - Production deployment

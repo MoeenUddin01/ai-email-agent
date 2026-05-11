@@ -9,7 +9,7 @@ echo ""
 # Start backend
 echo "[1/2] Starting backend on http://localhost:8000 ..."
 cd "$ROOT_DIR"
-nohup python -m uvicorn src.api.main:app --host 0.0.0.0 --port 8000 --reload > /tmp/ai-email-agent-backend.log 2>&1 &
+nohup uv run uvicorn src.api.main:app --host 0.0.0.0 --port 8000 --reload > /tmp/ai-email-agent-backend.log 2>&1 &
 BACKEND_PID=$!
 echo "  Backend PID: $BACKEND_PID"
 
