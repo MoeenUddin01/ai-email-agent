@@ -112,15 +112,20 @@ class RAGService:
         context = self._build_context(relevant_docs)
         print(f"DEBUG: Found {len(relevant_docs)} relevant documents")
         
-        # Generate reply using LLM
+        # Generate reply using LLM with separate system prompt
         print("DEBUG: Building prompt and generating reply...")
-        prompt = self._build_prompt(email_content, sender, subject, context)
+        system_prompt, user_prompt = self._build_prompt(email_content, sender, subject, context)
         
         reply = None
         model_used = None
         errors = []
         
         # Try providers in order: Groq (user has key) -> OpenAI -> Gemini
+        model_context_windows = {
+            "llama-3.3-70b-versatile": 131072,
+            "gpt-4": 8192,
+            "gemini-2.0-flash": 1048576,
+        }
         providers = [
             ("groq", self.groq_client, "llama-3.3-70b-versatile"),
             ("openai", self.openai_client, "gpt-4"),
@@ -135,8 +140,8 @@ class RAGService:
                 response = await client.chat.completions.create(
                     model=model,
                     messages=[
-                        {"role": "system", "content": "You are a helpful assistant that drafts email replies."},
-                        {"role": "user", "content": prompt}
+                        {"role": "system", "content": system_prompt},
+                        {"role": "user", "content": user_prompt}
                     ],
                     temperature=0.7,
                     max_tokens=1000
@@ -154,12 +159,21 @@ class RAGService:
         if not reply:
             raise Exception(f"All LLM providers failed: {'; '.join(errors)}")
         
+        full_prompt_text = f"System: {system_prompt}\nUser: {user_prompt}"
+        estimated_prompt_tokens = len(full_prompt_text) // 4
+        max_context = model_context_windows.get(model_used, 8192)
+        
         return {
             "draft_content": reply,
             "model_used": model_used,
             "retrieved_context": {
                 "documents": relevant_docs,
                 "context_text": context,
+            },
+            "token_info": {
+                "estimated_prompt_tokens": estimated_prompt_tokens,
+                "max_context_window": max_context,
+                "usage_pct": round(estimated_prompt_tokens / max_context * 100, 1),
             },
         }
     
@@ -174,19 +188,18 @@ class RAGService:
         
         return "\n".join(parts)
     
-    def _build_prompt(self, email_content: str, sender: str, subject: str, context: str) -> str:
-        """Build prompt for LLM."""
-        return f"""You received an email that requires a reply.
-
-EMAIL DETAILS:
-From: {sender}
-Subject: {subject}
-Body:
-{email_content}
-
-RELEVANT CONTEXT FROM KNOWLEDGE BASE:
-{context}
-
-Please craft a professional, helpful reply to this email. Use the provided context to answer questions accurately about courses and programs. If the context doesn't contain relevant information, acknowledge that and offer to help further.
-
-Write the reply as if you are responding directly to the sender."""
+    def _build_prompt(self, email_content: str, sender: str, subject: str, context: str) -> tuple[str, str]:
+        """Build system prompt and user message for LLM."""
+        system = (
+            "You draft professional email replies for a course/program advisor. "
+            "Use the provided context to answer accurately. "
+            "If context lacks relevant info, acknowledge it and offer general help. "
+            "Keep replies concise and helpful. Never make up facts."
+        )
+        user = (
+            f"From: {sender}\n"
+            f"Subject: {subject}\n"
+            f"Body:\n{email_content}\n\n"
+            f"Relevant context:\n{context}"
+        )
+        return system, user

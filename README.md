@@ -370,6 +370,7 @@ node debug-auth.js
 
 ⬜ **Pending:**
 - Production deployment
+- Feedback-driven RAG improvement: once 50+ ratings collected, use feedback + `was_modified` data to fine-tune retrieval or re-rank knowledge base documents
 
 ## Deployment
 

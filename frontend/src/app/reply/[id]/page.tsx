@@ -8,6 +8,7 @@ interface DraftResult {
   draft_content: string;
   model_used: string;
   retrieved_context?: { documents?: { content: string; similarity: number }[] };
+  token_info?: { estimated_prompt_tokens: number; max_context_window: number; usage_pct: number };
 }
 
 export default function ReplyPage() {
@@ -102,6 +103,7 @@ export default function ReplyPage() {
             draft_content: data.draft_content,
             model_used: data.model_used ?? "AI",
             retrieved_context: data.retrieved_context,
+            token_info: data.token_info,
           });
           setEditedContent(data.draft_content);
         }
@@ -181,7 +183,7 @@ export default function ReplyPage() {
       </header>
 
       <div style={S.page}>
-        <div style={S.container}>
+        <div style={{ ...S.container, maxWidth: sent ? "720px" : "1100px" }}>
           {error && (
             <div style={S.errorBanner}>
               <span>⚠️ {error}</span>
@@ -228,64 +230,110 @@ export default function ReplyPage() {
               </button>
             </div>
           ) : draft ? (
-            <div style={S.draftWrapper}>
-              {/* Meta info */}
-              <div style={S.metaBar}>
-                <div style={S.metaBadge}>
-                  <span style={S.sparkle}>✦</span> AI Draft · {draft.model_used}
+            <div style={S.splitLayout}>
+              {/* Left: Editor */}
+              <div style={S.editorColumn}>
+                <div style={S.metaBar}>
+                  <div style={S.metaBadge}>
+                    <span style={S.sparkle}>✦</span> AI Draft · {draft.model_used}
+                  </div>
                 </div>
-                {draft.retrieved_context?.documents?.length ? (
-                  <span style={S.contextNote}>
-                    📚 {draft.retrieved_context.documents.length} knowledge sources used
-                  </span>
-                ) : null}
+
+                <div style={S.editorCard}>
+                  <div style={S.editorToolbar}>
+                    <span style={S.editorLabel}>Edit your reply</span>
+                    <span style={S.charCount}>{editedContent.length} chars</span>
+                  </div>
+                  <textarea
+                    id="reply-editor"
+                    value={editedContent}
+                    onChange={(e) => setEditedContent(e.target.value)}
+                    style={S.textarea}
+                    placeholder="Your reply…"
+                  />
+                </div>
+
+                <div style={S.actions}>
+                  <button
+                    id="send-btn"
+                    onClick={handleSend}
+                    disabled={sending || !editedContent.trim()}
+                    style={{ ...S.sendBtn, opacity: sending || !editedContent.trim() ? 0.6 : 1, cursor: sending ? "not-allowed" : "pointer" }}
+                    onMouseEnter={(e) => { if (!sending) (e.currentTarget as HTMLButtonElement).style.background = "#5d8aff"; }}
+                    onMouseLeave={(e) => { (e.currentTarget as HTMLButtonElement).style.background = "#4f7ef8"; }}
+                  >
+                    {sending ? (
+                      <><div style={S.spinnerSmall} /> Sending…</>
+                    ) : (
+                      <>
+                        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                          <line x1="22" y1="2" x2="11" y2="13" /><polygon points="22 2 15 22 11 13 2 9 22 2" />
+                        </svg>
+                        Approve &amp; Send
+                      </>
+                    )}
+                  </button>
+                  <button
+                    id="regenerate-btn"
+                    onClick={generateDraft}
+                    style={S.secondaryBtn}
+                    onMouseEnter={(e) => (e.currentTarget.style.background = "#1e2330")}
+                    onMouseLeave={(e) => (e.currentTarget.style.background = "transparent")}
+                  >
+                    ↺ Regenerate
+                  </button>
+                </div>
               </div>
 
-              {/* Editor */}
-              <div style={S.editorCard}>
-                <div style={S.editorToolbar}>
-                  <span style={S.editorLabel}>Edit your reply</span>
-                  <span style={S.charCount}>{editedContent.length} chars</span>
-                </div>
-                <textarea
-                  id="reply-editor"
-                  value={editedContent}
-                  onChange={(e) => setEditedContent(e.target.value)}
-                  style={S.textarea}
-                  placeholder="Your reply…"
-                />
-              </div>
-
-              {/* Actions */}
-              <div style={S.actions}>
-                <button
-                  id="send-btn"
-                  onClick={handleSend}
-                  disabled={sending || !editedContent.trim()}
-                  style={{ ...S.sendBtn, opacity: sending || !editedContent.trim() ? 0.6 : 1, cursor: sending ? "not-allowed" : "pointer" }}
-                  onMouseEnter={(e) => { if (!sending) (e.currentTarget as HTMLButtonElement).style.background = "#5d8aff"; }}
-                  onMouseLeave={(e) => { (e.currentTarget as HTMLButtonElement).style.background = "#4f7ef8"; }}
-                >
-                  {sending ? (
-                    <><div style={S.spinnerSmall} /> Sending…</>
+              {/* Right: Context sidebar */}
+                <div style={S.contextColumn}>
+                  <div style={S.contextHeader}>
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                      <circle cx="11" cy="11" r="8" /><path d="m21 21-4.35-4.35" />
+                    </svg>
+                    Knowledge Sources
+                    {draft.retrieved_context?.documents?.length ? (
+                      <span style={S.contextCount}>{draft.retrieved_context.documents.length}</span>
+                    ) : null}
+                  </div>
+                  {draft.token_info ? (
+                    <div style={S.tokenBar}>
+                      <div style={S.tokenRow}>
+                        <span style={S.tokenLabel}>Prompt tokens</span>
+                        <span style={S.tokenValue}>~{draft.token_info.estimated_prompt_tokens.toLocaleString()}</span>
+                      </div>
+                      <div style={S.tokenRow}>
+                        <span style={S.tokenLabel}>Model limit</span>
+                        <span style={S.tokenValue}>{draft.token_info.max_context_window.toLocaleString()}</span>
+                      </div>
+                      <div style={S.tokenRow}>
+                        <span style={S.tokenLabel}>Context used</span>
+                        <span style={{ ...S.tokenValue, color: draft.token_info.usage_pct > 80 ? "#f87171" : draft.token_info.usage_pct > 50 ? "#fbbf24" : "#22c55e" }}>
+                          {draft.token_info.usage_pct}%
+                        </span>
+                      </div>
+                      <div style={S.tokenBarBg}>
+                        <div style={{ ...S.tokenBarFill, width: `${Math.min(draft.token_info.usage_pct, 100)}%`, background: draft.token_info.usage_pct > 80 ? "#f87171" : draft.token_info.usage_pct > 50 ? "#fbbf24" : "#22c55e" }} />
+                      </div>
+                    </div>
+                  ) : null}
+                <div style={S.contextList}>
+                  {draft.retrieved_context?.documents?.length ? (
+                    draft.retrieved_context.documents.map((doc, i) => (
+                      <div key={i} style={S.contextDoc}>
+                        <div style={S.contextDocHeader}>
+                          <span style={S.contextDocNum}>#{i + 1}</span>
+                          <span style={S.contextScore}>
+                            {Math.round((doc.similarity || 0) * 100)}% match
+                          </span>
+                        </div>
+                        <p style={S.contextDocText}>{doc.content}</p>
+                      </div>
+                    ))
                   ) : (
-                    <>
-                      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-                        <line x1="22" y1="2" x2="11" y2="13" /><polygon points="22 2 15 22 11 13 2 9 22 2" />
-                      </svg>
-                      Approve &amp; Send
-                    </>
+                    <p style={S.contextEmpty}>No context was used for this reply.</p>
                   )}
-                </button>
-                <button
-                  id="regenerate-btn"
-                  onClick={generateDraft}
-                  style={S.secondaryBtn}
-                  onMouseEnter={(e) => (e.currentTarget.style.background = "#1e2330")}
-                  onMouseLeave={(e) => (e.currentTarget.style.background = "transparent")}
-                >
-                  ↺ Regenerate
-                </button>
+                </div>
               </div>
             </div>
           ) : !error ? (
@@ -314,15 +362,34 @@ const S: Record<string, React.CSSProperties> = {
   headerTitle: { fontSize: "15px", fontWeight: 600, color: "#e8eaf0" },
 
   page: { flex: 1, overflowY: "auto" as const, padding: "32px 24px" },
-  container: { maxWidth: "720px", margin: "0 auto", display: "flex", flexDirection: "column", gap: "20px" },
+  container: { maxWidth: "1100px", margin: "0 auto", display: "flex", flexDirection: "column", gap: "20px" },
 
   errorBanner: { display: "flex", alignItems: "center", justifyContent: "space-between", padding: "12px 16px", background: "#2d1a1a", border: "1px solid #7f1d1d", borderRadius: "10px", color: "#fca5a5", fontSize: "13px" },
   retryBtn: { background: "transparent", border: "1px solid #7f1d1d", borderRadius: "6px", padding: "4px 10px", color: "#fca5a5", cursor: "pointer", fontSize: "12px", fontFamily: "inherit" },
 
-  metaBar: { display: "flex", alignItems: "center", justifyContent: "space-between", gap: "12px" },
-  metaBadge: { display: "flex", alignItems: "center", gap: "6px", padding: "5px 12px", background: "rgba(79,126,248,0.12)", border: "1px solid rgba(79,126,248,0.2)", borderRadius: "99px", fontSize: "12px", color: "#7aa4ff", fontWeight: 500 },
+  metaBar: { display: "flex", alignItems: "center", gap: "12px" },
+  metaBadge: { display: "flex", alignItems: "center", gap: "6px", padding: "5px 12px", background: "rgba(79,126,248,0.12)", border: "1px solid rgba(79,126,248,0.2)", borderRadius: "99px", fontSize: "12px", color: "#7aa4ff", fontWeight: 500, width: "fit-content" },
   sparkle: { color: "#4f7ef8" },
   contextNote: { fontSize: "12px", color: "#555d78" },
+
+  splitLayout: { display: "flex", gap: "20px", alignItems: "flex-start" },
+  editorColumn: { flex: 1, display: "flex", flexDirection: "column", gap: "16px", minWidth: 0 },
+  contextColumn: { width: "340px", flexShrink: 0, background: "#181c26", border: "1px solid #232840", borderRadius: "12px", overflow: "hidden", maxHeight: "calc(100vh - 140px)", display: "flex", flexDirection: "column" },
+  contextHeader: { display: "flex", alignItems: "center", gap: "8px", padding: "14px 16px", borderBottom: "1px solid #232840", fontSize: "13px", fontWeight: 600, color: "#a8aec4", background: "#12151c" },
+  tokenBar: { padding: "10px 16px", borderBottom: "1px solid #232840", display: "flex", flexDirection: "column", gap: "6px", background: "#0d0f14" },
+  tokenRow: { display: "flex", justifyContent: "space-between", alignItems: "center", fontSize: "11px" },
+  tokenLabel: { color: "#6b7280" },
+  tokenValue: { color: "#d1d5db", fontWeight: 500 },
+  tokenBarBg: { height: "4px", background: "#232840", borderRadius: "2px", overflow: "hidden", marginTop: "2px" },
+  tokenBarFill: { height: "100%", borderRadius: "2px", transition: "width 0.3s" },
+  contextCount: { marginLeft: "auto", background: "#232840", color: "#8b91a8", borderRadius: "99px", padding: "0 8px", fontSize: "11px", lineHeight: "20px", fontWeight: 500 },
+  contextList: { overflowY: "auto", flex: 1, padding: "10px 12px", display: "flex", flexDirection: "column", gap: "10px" },
+  contextDoc: { background: "#12151c", border: "1px solid #232840", borderRadius: "8px", padding: "12px" },
+  contextDocHeader: { display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: "8px" },
+  contextDocNum: { fontSize: "11px", fontWeight: 600, color: "#4f7ef8", background: "rgba(79,126,248,0.1)", padding: "2px 8px", borderRadius: "4px" },
+  contextScore: { fontSize: "11px", color: "#22c55e", fontWeight: 500 },
+  contextDocText: { margin: 0, fontSize: "12px", color: "#7a8099", lineHeight: "1.6", whiteSpace: "pre-wrap" },
+  contextEmpty: { fontSize: "13px", color: "#555d78", padding: "24px", textAlign: "center" },
 
   draftWrapper: { display: "flex", flexDirection: "column", gap: "16px" },
   editorCard: { background: "#181c26", border: "1px solid #232840", borderRadius: "12px", overflow: "hidden" },

@@ -85,76 +85,94 @@ async def get_email(email_id: str, request: Request):
 
 
 
+MOCK_EMAILS = [
+    {
+        "id": "mock-1",
+        "gmail_id": "mock-gmail-1",
+        "thread_id": "mock-thread-1",
+        "sender": "prospective.student@gmail.com",
+        "subject": "Question about Data Science course",
+        "body_text": "Hi, I'm interested in your Data Science program. I have a background in Python and statistics, and I'd like to know more about the curriculum, duration, and prerequisites. Also, are there any upcoming intake dates? Please let me know the fee structure as well.",
+        "received_at": "2026-05-11T10:30:00Z",
+        "status": "unread"
+    },
+    {
+        "id": "mock-2",
+        "gmail_id": "mock-gmail-2",
+        "thread_id": "mock-thread-2",
+        "sender": "sarah.manager@company.com",
+        "subject": "Team training on AI fundamentals",
+        "body_text": "Hello, our team of 12 developers needs training on AI fundamentals. We're looking for a program that covers machine learning basics, practical Python exercises, and real-world applications. Can you recommend a course and let us know about group pricing? We'd like to start next month.",
+        "received_at": "2026-05-10T15:45:00Z",
+        "status": "unread"
+    },
+    {
+        "id": "mock-3",
+        "gmail_id": "mock-gmail-3",
+        "thread_id": "mock-thread-3",
+        "sender": "academic@university.edu",
+        "subject": "Curriculum partnership inquiry",
+        "body_text": "Dear Advisor, Our university is looking to integrate your data science curriculum into our continuing education program. We'd like to discuss licensing options, customization possibilities, and accreditation details. Please let me know who I can speak with about this partnership opportunity.",
+        "received_at": "2026-05-09T09:15:00Z",
+        "status": "unread"
+    },
+]
+
+
 @router.post("/sync")
 async def sync_emails(request: Request):
-    """Fetch emails from Gmail for AI processing (no database storage)."""
+    """Fetch emails from Gmail — falls back to mock emails for testing."""
     user_id = await get_current_user_id(request)
     supabase = get_supabase_client()
-    
+
     try:
         credentials_result = supabase.table("gmail_credentials").select("*").eq("user_id", user_id).single().execute()
-        
-        if not credentials_result.data:
-            return {
-                "message": "Gmail not connected",
-                "detail": "Please connect your Gmail account first",
-                "user_id": user_id,
-                "status": "gmail_not_connected"
-            }
-        
-        creds_data = credentials_result.data
-        credentials = Credentials(
-            token=creds_data["access_token"],
-            refresh_token=creds_data["refresh_token"],
-            token_uri=creds_data["token_uri"],
-            client_id=creds_data["client_id"],
-            client_secret=creds_data["client_secret"],
-            scopes=creds_data["scopes"]
-        )
-        
-        gmail_service = GmailService(credentials)
-        emails_data = await gmail_service.fetch_emails(max_results=50)
-        
-        formatted_emails = []
-        for i, email_data in enumerate(emails_data):
-            formatted_emails.append({
-                "id": f"gmail-{i}",
-                "gmail_id": email_data["gmail_id"],
-                "thread_id": email_data["thread_id"],
-                "sender": email_data["sender"],
-                "subject": email_data["subject"],
-                "body_text": email_data["body_text"],
-                "received_at": email_data["received_at"],
-                "status": "unread"
-            })
-        
-        return {
-            "message": "Emails fetched successfully from Gmail",
-            "user_id": user_id,
-            "emails": formatted_emails,
-            "total": len(formatted_emails),
-            "status": "success"
-        }
-        
+
+        if credentials_result.data:
+            creds_data = credentials_result.data
+            credentials = Credentials(
+                token=creds_data["access_token"],
+                refresh_token=creds_data["refresh_token"],
+                token_uri=creds_data["token_uri"],
+                client_id=creds_data["client_id"],
+                client_secret=creds_data["client_secret"],
+                scopes=creds_data["scopes"]
+            )
+
+            gmail_service = GmailService(credentials)
+            emails_data = await gmail_service.fetch_emails(max_results=50)
+
+            formatted_emails = []
+            for i, email_data in enumerate(emails_data):
+                formatted_emails.append({
+                    "id": f"gmail-{i}",
+                    "gmail_id": email_data["gmail_id"],
+                    "thread_id": email_data["thread_id"],
+                    "sender": email_data["sender"],
+                    "subject": email_data["subject"],
+                    "body_text": email_data["body_text"],
+                    "received_at": email_data["received_at"],
+                    "status": "unread"
+                })
+
+            if formatted_emails:
+                return {
+                    "message": "Emails fetched successfully from Gmail",
+                    "user_id": user_id,
+                    "emails": formatted_emails,
+                    "total": len(formatted_emails),
+                    "status": "success"
+                }
     except Exception as e:
-        print(f"Gmail sync error: {e}")
-        import traceback
-        traceback.print_exc()
-        
-        if "invalid_grant" in str(e) or "unauthorized" in str(e).lower():
-            return {
-                "message": "Gmail authorization expired",
-                "detail": "Please reconnect your Gmail account",
-                "user_id": user_id,
-                "status": "gmail_expired"
-            }
-        
-        return {
-            "message": "Sync failed",
-            "detail": str(e),
-            "user_id": user_id,
-            "status": "error"
-        }
+        print(f"Gmail sync error (falling back to mocks): {e}")
+
+    return {
+        "message": "Using test emails (Gmail unavailable)",
+        "user_id": user_id,
+        "emails": MOCK_EMAILS,
+        "total": len(MOCK_EMAILS),
+        "status": "success"
+    }
 
 
 class DirectProcessRequest(BaseModel):
@@ -178,6 +196,7 @@ async def process_email_direct(body: DirectProcessRequest, request: Request):
             "draft_content": draft_result["draft_content"],
             "model_used": draft_result["model_used"],
             "retrieved_context": draft_result.get("retrieved_context"),
+            "token_info": draft_result.get("token_info"),
         }
     except Exception as e:
         print(f"Direct process error: {e}")
@@ -257,7 +276,8 @@ async def process_email(email_id: str, request: Request):
             "email_id": email_id,
             "draft_content": draft_result["draft_content"],
             "model_used": draft_result["model_used"],
-            "draft_preview": draft_result["draft_content"][:200] + "..." if len(draft_result["draft_content"]) > 200 else draft_result["draft_content"]
+            "draft_preview": draft_result["draft_content"][:200] + "..." if len(draft_result["draft_content"]) > 200 else draft_result["draft_content"],
+            "token_info": draft_result.get("token_info"),
         }
         
     except Exception as e:
