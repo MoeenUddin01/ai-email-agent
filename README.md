@@ -11,11 +11,13 @@ AI-powered email reply agent for Gmail with RAG (Retrieval-Augmented Generation)
 - ⭐ **Feedback System**: Rate replies (1-5 stars) and provide textual feedback with aggregate statistics
 - 🔐 **Dual OAuth**: Supabase Auth (Google login) + separate Gmail API OAuth for email access
 - 💾 **Local Embeddings**: Uses `all-MiniLM-L6-v2` (384-dim) via sentence-transformers on CPU
-- 🎨 **Premium Dark UI**: Modern Next.js frontend with Tailwind CSS and glassmorphism effects
+- 🎨 **Premium Dark UI**: Modern Next.js frontend with dark theme and split-pane reply editor
 - ⚡ **Persistent State**: Emails cached in `sessionStorage` for instant navigation without re-syncing
 - 🏥 **Health Dashboard**: Comprehensive health check endpoint monitoring all system components
 - 🧪 **Mock Email System**: Built-in mock emails for testing without live Gmail connection
 - 🗄️ **Multiple DB Migrations**: Schema management for `gmail_credentials` and `user_credentials` tables
+- 📊 **Token Usage Display**: Context sidebar shows prompt token count, model limit, and usage percentage
+- 🧵 **Non-blocking Gmail**: Google API calls wrapped in thread pool to prevent event loop blocking
 
 ## Architecture
 
@@ -62,6 +64,7 @@ cp .env.example .env
 Required services:
 - **Supabase**: Create project, enable pgvector extension, run schema.sql, configure Auth with Google provider
 - **Google Cloud**: Create OAuth 2.0 credentials for Gmail API and Supabase Auth
+  - Add `https://your-project.supabase.co/auth/v1/callback` to Authorized Redirect URIs
 - **Groq**: Get API key (recommended) OR OpenAI/Gemini API keys
 
 ### 3. Database Setup
@@ -105,17 +108,17 @@ NEXT_PUBLIC_BACKEND_URL="http://localhost:8000"
 
 ```bash
 # Terminal 1: Backend (from project root)
-uv run uvicorn src.api.main:app --reload --host 0.0.0.0 --port 8000
+uv run uvicorn src.api.main:app --host 0.0.0.0 --port 8000
 
 # Terminal 2: Frontend
 cd frontend
 npm run dev
 ```
 
-Or run the full UI with a single command:
+Or run both with a single command:
 
 ```bash
-./run.sh
+./start.sh
 ```
 
 Visit:
@@ -188,7 +191,9 @@ ai-email-agent/
 │   └── postcss.config.js
 ├── data/
 │   └── vizaura_courses_dataset.csv   # 150 course/program entries
-├── run.sh                            # One-command startup script
+├── start.sh                          # One-command startup script (backend + frontend)
+├── scripts/
+│   └── test_reply.py                 # Standalone AI reply generation test
 ├── debug-auth.js                     # Supabase auth debug script
 ├── create_gmail_credentials_table.py # Script to create gmail_credentials table via API
 ├── setup_gmail_table.sql             # Standalone SQL for gmail_credentials table
@@ -314,6 +319,9 @@ Embeddings always use local **`all-MiniLM-L6-v2`** (384 dimensions) via `sentenc
    - `public.users` table empty — user auto-created in send flow, but ensure Supabase Auth user exists
    - `sent_emails.email_id` expects UUID but Gmail message ID passed — backend auto-resolves by `gmail_id`
 6. **Email stored but not delivered ("Recipient address required")**: Frontend must pass `recipient` and `subject` in send request. Backend updates existing email records if they have empty `sender`/`subject`
+7. **Auth 401 (Invalid token)**: Backend verifies Supabase tokens via HTTP API. If Supabase is unreachable, check network connectivity or increase timeout in `auth.py`
+8. **Gmail sync timeout**: Google API calls use `run_in_executor` to avoid blocking the event loop. If calls still time out, check network connectivity to `gmail.googleapis.com` and `oauth2.googleapis.com`
+9. **Login fails with `redirect_uri_mismatch`**: Add `https://your-project.supabase.co/auth/v1/callback` to your Google Cloud Console OAuth client's Authorized Redirect URIs
 
 ### Migration Scripts
 
@@ -343,7 +351,8 @@ node debug-auth.js
 
 | Script | Description |
 |--------|-------------|
-| `run.sh` | One-command startup: backend + frontend in background |
+| `start.sh` | One-command startup: backend + frontend in background |
+| `scripts/test_reply.py` | Test AI reply generation against a sample course inquiry |
 | `backend/scripts/ingest_csv.py --csv <path> --clear` | Ingest CSV; `--clear` empties existing vectors |
 | `backend/scripts/migrate_embeddings.py` | Drop & recreate table for 384-dim embeddings |
 | `backend/scripts/fix_rls_policies.sql` | RLS using `current_setting('app.current_user_id')` |
@@ -360,13 +369,19 @@ node debug-auth.js
 - Supabase database with pgvector (7 tables)
 - CSV ingestion for knowledge base
 - Feedback system with aggregate stats
-- Next.js frontend with Tailwind CSS dark UI
+- Next.js frontend with dark theme and split-pane reply editor
 - Mock email system for testing without Gmail
 - sessionStorage caching for instant navigation
 - Health dashboard with system metrics
 - LLM provider fallback (Groq → OpenAI → Gemini)
 - Database migration scripts for all tables
 - Send flow with auto-user/email creation, UUID resolution, recipient/subject passthrough
+- Non-blocking Gmail API calls via thread pool
+- Token usage display (prompt tokens, model limit, usage %)
+- Local JWT verification with disk-cached Supabase JWKS
+- Mock email fallback in sync endpoint
+- Test reply generation script (`scripts/test_reply.py`)
+- Single-command startup via `start.sh`
 
 ⬜ **Pending:**
 - Production deployment
