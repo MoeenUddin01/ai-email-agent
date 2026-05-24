@@ -1,7 +1,7 @@
 "use client";
 
-import { useEffect, useState, useRef } from "react";
-import { useRouter, useParams } from "next/navigation";
+import { useEffect, useState, useRef, Suspense } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
 import { supabase } from "@/utils/supabase";
 
 interface DraftResult {
@@ -11,16 +11,17 @@ interface DraftResult {
   token_info?: { estimated_prompt_tokens: number; max_context_window: number; usage_pct: number };
 }
 
-export default function ReplyPage() {
+function ReplyPageInner() {
   const router = useRouter();
-  const params = useParams();
-  const emailId = params.id as string;
+  const searchParams = useSearchParams();
+  const emailId = searchParams.get("id") || "";
 
   const [draft, setDraft] = useState<DraftResult | null>(null);
   const [editedContent, setEditedContent] = useState("");
   const [generating, setGenerating] = useState(false);
   const [sending, setSending] = useState(false);
   const [sent, setSent] = useState(false);
+  const [sentEmailId, setSentEmailId] = useState<string | null>(null);
   const [rating, setRating] = useState(0);
   const [feedback, setFeedback] = useState("");
   const [hoverRating, setHoverRating] = useState(0);
@@ -33,14 +34,11 @@ export default function ReplyPage() {
   };
 
   useEffect(() => {
-    // Wait for Supabase to restore session before generating
     const bootstrap = async () => {
       if (hasFetched.current) return;
 
-      // getSession() is reliable after the client hydrates
       const { data: { session } } = await supabase.auth.getSession();
       if (!session) {
-        // Subscribe once to catch the restored session
         const { data: { subscription } } = supabase.auth.onAuthStateChange((_e, s) => {
           subscription.unsubscribe();
           if (s) {
@@ -67,27 +65,24 @@ export default function ReplyPage() {
       const token = await getToken();
       if (!token) { router.push("/"); return; }
 
-      // Read email data stored by the inbox page
       const stored = sessionStorage.getItem("ai_agent_email_data");
       const emailData = stored ? JSON.parse(stored) : null;
 
       let res: Response;
       if (emailData) {
-        // Use the direct endpoint — no DB lookup needed for temp IDs
         res = await fetch(
           `${process.env.NEXT_PUBLIC_BACKEND_URL}/emails/process-direct`,
           {
             method: "POST",
             headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
             body: JSON.stringify({
-              sender: emailData.sender,
-              subject: emailData.subject,
-              body_text: emailData.body_text,
+              sender: emailData.sender ?? "",
+              subject: emailData.subject ?? "",
+              body_text: emailData.body_text ?? "",
             }),
           }
         );
       } else {
-        // Fallback to DB-based endpoint for persisted emails
         res = await fetch(
           `${process.env.NEXT_PUBLIC_BACKEND_URL}/emails/${emailId}/process`,
           { method: "POST", headers: { Authorization: `Bearer ${token}` } }
@@ -138,6 +133,8 @@ export default function ReplyPage() {
         }),
       });
       if (res.ok) {
+        const data = await res.json();
+        setSentEmailId(data.sent_email?.id ?? null);
         setSent(true);
       } else {
         let detail = `Error ${res.status}`;
@@ -152,10 +149,25 @@ export default function ReplyPage() {
   };
 
   const handleFeedback = async () => {
+    if (sentEmailId && rating > 0) {
+      const token = await getToken();
+      if (token) {
+        try {
+          await fetch(`${process.env.NEXT_PUBLIC_BACKEND_URL}/feedback/`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+            body: JSON.stringify({
+              sent_email_id: sentEmailId,
+              star_rating: rating,
+              text_feedback: feedback || null,
+            }),
+          });
+        } catch { /* best-effort */ }
+      }
+    }
     router.push("/inbox");
   };
 
-  // --- Loading ---
   if (generating) {
     return (
       <div style={S.fullCenter}>
@@ -170,7 +182,6 @@ export default function ReplyPage() {
 
   return (
     <div style={S.root}>
-      {/* Header */}
       <header style={S.header}>
         <button id="back-btn" onClick={() => router.push("/inbox")} style={S.backBtn}>
           <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
@@ -192,7 +203,6 @@ export default function ReplyPage() {
           )}
 
           {sent ? (
-            /* Feedback section */
             <div style={S.feedbackCard}>
               <div style={S.sentIcon}>✅</div>
               <h2 style={S.feedbackTitle}>Email Sent!</h2>
@@ -231,7 +241,6 @@ export default function ReplyPage() {
             </div>
           ) : draft ? (
             <div style={S.splitLayout}>
-              {/* Left: Editor */}
               <div style={S.editorColumn}>
                 <div style={S.metaBar}>
                   <div style={S.metaBadge}>
@@ -285,38 +294,37 @@ export default function ReplyPage() {
                 </div>
               </div>
 
-              {/* Right: Context sidebar */}
-                <div style={S.contextColumn}>
-                  <div style={S.contextHeader}>
-                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                      <circle cx="11" cy="11" r="8" /><path d="m21 21-4.35-4.35" />
-                    </svg>
-                    Knowledge Sources
-                    {draft.retrieved_context?.documents?.length ? (
-                      <span style={S.contextCount}>{draft.retrieved_context.documents.length}</span>
-                    ) : null}
-                  </div>
-                  {draft.token_info ? (
-                    <div style={S.tokenBar}>
-                      <div style={S.tokenRow}>
-                        <span style={S.tokenLabel}>Prompt tokens</span>
-                        <span style={S.tokenValue}>~{draft.token_info.estimated_prompt_tokens.toLocaleString()}</span>
-                      </div>
-                      <div style={S.tokenRow}>
-                        <span style={S.tokenLabel}>Model limit</span>
-                        <span style={S.tokenValue}>{draft.token_info.max_context_window.toLocaleString()}</span>
-                      </div>
-                      <div style={S.tokenRow}>
-                        <span style={S.tokenLabel}>Context used</span>
-                        <span style={{ ...S.tokenValue, color: draft.token_info.usage_pct > 80 ? "#f87171" : draft.token_info.usage_pct > 50 ? "#fbbf24" : "#22c55e" }}>
-                          {draft.token_info.usage_pct}%
-                        </span>
-                      </div>
-                      <div style={S.tokenBarBg}>
-                        <div style={{ ...S.tokenBarFill, width: `${Math.min(draft.token_info.usage_pct, 100)}%`, background: draft.token_info.usage_pct > 80 ? "#f87171" : draft.token_info.usage_pct > 50 ? "#fbbf24" : "#22c55e" }} />
-                      </div>
-                    </div>
+              <div style={S.contextColumn}>
+                <div style={S.contextHeader}>
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                    <circle cx="11" cy="11" r="8" /><path d="m21 21-4.35-4.35" />
+                  </svg>
+                  Knowledge Sources
+                  {draft.retrieved_context?.documents?.length ? (
+                    <span style={S.contextCount}>{draft.retrieved_context.documents.length}</span>
                   ) : null}
+                </div>
+                {draft.token_info ? (
+                  <div style={S.tokenBar}>
+                    <div style={S.tokenRow}>
+                      <span style={S.tokenLabel}>Prompt tokens</span>
+                      <span style={S.tokenValue}>~{draft.token_info.estimated_prompt_tokens.toLocaleString()}</span>
+                    </div>
+                    <div style={S.tokenRow}>
+                      <span style={S.tokenLabel}>Model limit</span>
+                      <span style={S.tokenValue}>{draft.token_info.max_context_window.toLocaleString()}</span>
+                    </div>
+                    <div style={S.tokenRow}>
+                      <span style={S.tokenLabel}>Context used</span>
+                      <span style={{ ...S.tokenValue, color: draft.token_info.usage_pct > 80 ? "#f87171" : draft.token_info.usage_pct > 50 ? "#fbbf24" : "#22c55e" }}>
+                        {draft.token_info.usage_pct}%
+                      </span>
+                    </div>
+                    <div style={S.tokenBarBg}>
+                      <div style={{ ...S.tokenBarFill, width: `${Math.min(draft.token_info.usage_pct, 100)}%`, background: draft.token_info.usage_pct > 80 ? "#f87171" : draft.token_info.usage_pct > 50 ? "#fbbf24" : "#22c55e" }} />
+                    </div>
+                  </div>
+                ) : null}
                 <div style={S.contextList}>
                   {draft.retrieved_context?.documents?.length ? (
                     draft.retrieved_context.documents.map((doc, i) => (
@@ -345,6 +353,21 @@ export default function ReplyPage() {
         </div>
       </div>
     </div>
+  );
+}
+
+export default function ReplyPage() {
+  return (
+    <Suspense fallback={
+      <div style={S.fullCenter}>
+        <div style={S.loadingCard}>
+          <div style={S.spinnerLarge} />
+          <p style={S.loadingTitle}>Loading…</p>
+        </div>
+      </div>
+    }>
+      <ReplyPageInner />
+    </Suspense>
   );
 }
 

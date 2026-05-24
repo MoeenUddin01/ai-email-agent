@@ -3,7 +3,7 @@
 from fastapi import APIRouter, HTTPException, Request
 from pydantic import BaseModel
 from typing import List, Optional
-from datetime import datetime
+from datetime import datetime, timezone
 from google.oauth2.credentials import Credentials
 
 from src.db.supabase import SupabaseService
@@ -121,58 +121,125 @@ MOCK_EMAILS = [
 
 @router.post("/sync")
 async def sync_emails(request: Request):
-    """Fetch emails from Gmail — falls back to mock emails for testing."""
+    """Fetch emails from Gmail."""
     user_id = await get_current_user_id(request)
     supabase = get_supabase_client()
 
+    # Check if Gmail credentials exist
     try:
         credentials_result = supabase.table("gmail_credentials").select("*").eq("user_id", user_id).single().execute()
+    except Exception:
+        credentials_result = type('obj', (object,), {'data': None})()
 
-        if credentials_result.data:
-            creds_data = credentials_result.data
-            credentials = Credentials(
-                token=creds_data["access_token"],
-                refresh_token=creds_data["refresh_token"],
-                token_uri=creds_data["token_uri"],
-                client_id=creds_data["client_id"],
-                client_secret=creds_data["client_secret"],
-                scopes=creds_data["scopes"]
-            )
+    if not credentials_result or not credentials_result.data:
+        return {
+            "status": "gmail_not_connected",
+            "detail": "Gmail not connected — please connect first",
+            "user_id": user_id,
+            "emails": MOCK_EMAILS,
+            "total": len(MOCK_EMAILS),
+        }
 
-            gmail_service = GmailService(credentials)
-            emails_data = await gmail_service.fetch_emails(max_results=50)
+    # Credentials exist — try to fetch real emails
+    try:
+        creds_data = credentials_result.data
+        credentials = Credentials(
+            token=creds_data["access_token"],
+            refresh_token=creds_data["refresh_token"],
+            token_uri=creds_data.get("token_uri", "https://oauth2.googleapis.com/token"),
+            client_id=creds_data["client_id"],
+            client_secret=creds_data["client_secret"],
+            scopes=creds_data.get("scopes", GmailService.SCOPES)
+        )
 
-            formatted_emails = []
-            for i, email_data in enumerate(emails_data):
-                formatted_emails.append({
-                    "id": f"gmail-{i}",
-                    "gmail_id": email_data["gmail_id"],
-                    "thread_id": email_data["thread_id"],
-                    "sender": email_data["sender"],
-                    "subject": email_data["subject"],
-                    "body_text": email_data["body_text"],
-                    "received_at": email_data["received_at"],
-                    "status": "unread"
-                })
+        gmail_service = GmailService(credentials)
 
-            if formatted_emails:
-                return {
-                    "message": "Emails fetched successfully from Gmail",
-                    "user_id": user_id,
-                    "emails": formatted_emails,
-                    "total": len(formatted_emails),
-                    "status": "success"
-                }
+        # Ensure user exists in the public.users table before inserting emails
+        try:
+            user_exists = supabase.table("users").select("id").eq("id", user_id).maybe_single().execute()
+            if not user_exists.data:
+                supabase.table("users").insert({"id": user_id, "email": "", "google_id": user_id}).execute()
+        except Exception:
+            try:
+                supabase.table("users").insert({"id": user_id, "email": "", "google_id": user_id}).execute()
+            except Exception:
+                pass
+
+        emails_data = await gmail_service.fetch_emails(max_results=50)
+
+        # Persist the (possibly refreshed) token back to DB
+        try:
+            supabase.table("gmail_credentials").update({
+                "access_token": credentials.token,
+                "updated_at": datetime.now(timezone.utc).isoformat(),
+            }).eq("user_id", user_id).execute()
+        except Exception as token_err:
+            print(f"Warning: failed to persist refreshed token: {token_err}")
+
+        # Format and store emails
+        stored_emails = []
+        for i, email_data in enumerate(emails_data):
+            email_record = {
+                "user_id": user_id,
+                "gmail_id": email_data["gmail_id"],
+                "thread_id": email_data["thread_id"],
+                "sender": email_data["sender"],
+                "subject": email_data["subject"],
+                "body_text": email_data["body_text"],
+                "received_at": email_data["received_at"],
+                "status": "unread"
+            }
+
+            # Try to store in DB, but return emails even if DB fails
+            try:
+                existing = supabase.table("emails").select("*").eq("gmail_id", email_data["gmail_id"]).eq("user_id", user_id).execute()
+                if existing.data:
+                    stored_emails.append(existing.data[0])
+                    continue
+
+                result = supabase.table("emails").insert(email_record).execute()
+                if result.data:
+                    stored_emails.append(result.data[0])
+                else:
+                    stored_emails.append(email_record)
+            except Exception as db_err:
+                print(f"DB store warning: {db_err}")
+                email_record["id"] = f"live-{i}"
+                stored_emails.append(email_record)
+
+        if stored_emails:
+            return {
+                "message": "Emails fetched successfully from Gmail",
+                "user_id": user_id,
+                "emails": stored_emails,
+                "total": len(stored_emails),
+                "status": "success"
+            }
+
+        return {
+            "status": "success",
+            "detail": "No new emails found",
+            "user_id": user_id,
+            "emails": [],
+            "total": 0,
+        }
+
     except Exception as e:
-        print(f"Gmail sync error (falling back to mocks): {e}")
-
-    return {
-        "message": "Using test emails (Gmail unavailable)",
-        "user_id": user_id,
-        "emails": MOCK_EMAILS,
-        "total": len(MOCK_EMAILS),
-        "status": "success"
-    }
+        import traceback
+        error_str = str(e).lower()
+        traceback.print_exc()
+        if "expired" in error_str or "invalid token" in error_str or "invalid grant" in error_str:
+            return {
+                "status": "gmail_expired",
+                "detail": "Gmail session expired — please reconnect",
+                "user_id": user_id,
+            }
+        print(f"Gmail sync error: {e}")
+        return {
+            "status": "error",
+            "detail": f"Failed to fetch emails: {str(e)}",
+            "user_id": user_id,
+        }
 
 
 class DirectProcessRequest(BaseModel):
@@ -269,7 +336,7 @@ async def process_email(email_id: str, request: Request):
                 "retrieved_context": draft_result["retrieved_context"],
             }
             supabase.table("ai_drafts").insert(draft_data).execute()
-            supabase.table("emails").update({"status": "processed", "processed_at": "now()"}).eq("id", email_id).execute()
+            supabase.table("emails").update({"status": "processed", "processed_at": datetime.now(timezone.utc).isoformat()}).eq("id", email_id).execute()
         
         return {
             "message": "AI draft generated successfully",

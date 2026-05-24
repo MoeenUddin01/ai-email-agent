@@ -5,8 +5,6 @@ FastAPI application for Gmail integration, RAG, and AI reply generation.
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.staticfiles import StaticFiles
-from fastapi.responses import FileResponse
 from contextlib import asynccontextmanager
 import uvicorn
 
@@ -18,8 +16,40 @@ from src.api.config import settings
 async def lifespan(app: FastAPI):
     """Application lifespan handler."""
     print("Starting AI Email Agent Backend...")
+    await auto_ingest_knowledge_base()
     yield
     print("Shutting down AI Email Agent Backend...")
+
+
+async def auto_ingest_knowledge_base():
+    """Auto-ingest CSV knowledge base if empty."""
+    from pathlib import Path
+    from src.rag.service import RAGService
+    from src.db.supabase import get_supabase_client
+
+    try:
+        client = get_supabase_client()
+        existing = client.table("knowledge_vectors").select("id").limit(1).execute()
+        if existing.data:
+            print(f"Knowledge base already populated — skipping auto-ingest")
+            return
+
+        csv_path = None
+        for parent in Path(__file__).resolve().parents:
+            candidate = parent / "data" / "vizaura_courses_dataset.csv"
+            if candidate.exists():
+                csv_path = candidate
+                break
+
+        if csv_path:
+            print(f"Auto-ingesting knowledge base from {csv_path}...")
+            rag = RAGService()
+            count = await rag.ingest_csv(str(csv_path))
+            print(f"Ingested {count} documents into knowledge base")
+        else:
+            print("Warning: CSV knowledge base not found — skipping auto-ingest")
+    except Exception as e:
+        print(f"Warning: auto-ingest failed ({e}) — continuing without knowledge base")
 
 
 app = FastAPI(
@@ -46,16 +76,6 @@ app.include_router(drafts.router, prefix="/drafts", tags=["AI Drafts"])
 app.include_router(feedback.router, prefix="/feedback", tags=["Feedback"])
 app.include_router(knowledge.router, prefix="/knowledge", tags=["Knowledge Base"])
 app.include_router(health.router, prefix="/health", tags=["Health"])
-
-# Mount static files
-app.mount("/static", StaticFiles(directory="src/api/static"), name="static")
-
-
-@app.get("/")
-async def root():
-    """Serve the attractive landing page."""
-    return FileResponse("src/api/static/index.html")
-
 
 @app.get("/ping")
 async def ping():

@@ -1,95 +1,28 @@
 "use client";
 
-import { Suspense, useEffect, useState, useRef } from "react";
+import { Suspense, useEffect, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
-import { supabase } from "@/utils/supabase";
 
 function GmailCallbackInner() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const [status, setStatus] = useState<"loading" | "success" | "error">("loading");
   const [message, setMessage] = useState("");
-  const handledRef = useRef(false);
 
   useEffect(() => {
-    const handleCallback = async () => {
-      if (handledRef.current) return;
-      handledRef.current = true;
+    const statusParam = searchParams.get("status");
+    const detailParam = searchParams.get("detail");
 
-      const code = searchParams.get("code");
-      const error = searchParams.get("error");
-
-      if (error) {
-        setStatus("error");
-        setMessage(`Gmail authorization failed: ${error}`);
-        return;
-      }
-
-      if (!code) {
-        setStatus("error");
-        setMessage("No authorization code received");
-        return;
-      }
-
-      try {
-        // Get session token
-        const sessionToken = (await supabase.auth.getSession()).data.session?.access_token;
-        if (!sessionToken) {
-          setStatus("error");
-          setMessage("No authentication session found");
-          return;
-        }
-
-        // Exchange code for tokens and store them
-        const response = await fetch(
-          `${process.env.NEXT_PUBLIC_BACKEND_URL}/auth/gmail/callback?code=${code}`,
-          {
-            headers: { Authorization: `Bearer ${sessionToken}` },
-          }
-        );
-
-        if (response.ok) {
-          const data = await response.json();
-          
-          // Store credentials
-          const storeResponse = await fetch(
-            `${process.env.NEXT_PUBLIC_BACKEND_URL}/auth/gmail/store-credentials`,
-            {
-              method: "POST",
-              headers: {
-                "Authorization": `Bearer ${sessionToken}`,
-                "Content-Type": "application/json",
-              },
-              body: JSON.stringify({
-                access_token: data.access_token,
-                refresh_token: data.refresh_token,
-              }),
-            }
-          );
-
-          if (storeResponse.ok) {
-            setStatus("success");
-            setMessage("Gmail account connected successfully!");
-            setTimeout(() => {
-              router.push("/inbox");
-            }, 2000);
-          } else {
-            setStatus("error");
-            setMessage("Failed to store Gmail credentials");
-          }
-        } else {
-          const errorData = await response.json();
-          setStatus("error");
-          setMessage(`Failed to connect Gmail: ${errorData.detail || 'Unknown error'}`);
-        }
-      } catch (error) {
-        console.error("Gmail callback error:", error);
-        setStatus("error");
-        setMessage("An unexpected error occurred");
-      }
-    };
-
-    handleCallback();
+    if (statusParam === "success") {
+      setStatus("success");
+      setMessage("Gmail account connected successfully!");
+      setTimeout(() => {
+        router.push("/inbox");
+      }, 2000);
+    } else {
+      setStatus("error");
+      setMessage(detailParam || "Failed to connect Gmail");
+    }
   }, [searchParams, router]);
 
   return (
@@ -98,8 +31,8 @@ function GmailCallbackInner() {
         {status === "loading" && (
           <>
             <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto mb-4"></div>
-            <h1 className="text-xl font-semibold mb-2">Connecting Gmail...</h1>
-            <p className="text-gray-600">Please wait while we connect your Gmail account.</p>
+            <h1 className="text-xl font-semibold mb-2">Completing Gmail Connection...</h1>
+            <p className="text-gray-600">Please wait while we finalize the setup.</p>
           </>
         )}
 

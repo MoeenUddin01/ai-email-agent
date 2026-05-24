@@ -6,12 +6,12 @@ import { supabase } from "@/utils/supabase";
 
 interface Email {
   id: string;
-  gmail_id: string;
-  sender: string;
-  subject: string;
-  body_text: string;
-  received_at: string;
-  status: string;
+  gmail_id?: string;
+  sender?: string | null;
+  subject?: string | null;
+  body_text?: string | null;
+  received_at?: string | null;
+  status?: string | null;
 }
 
 interface GmailStatus {
@@ -101,18 +101,26 @@ export default function Inbox() {
         headers: { Authorization: `Bearer ${token}` },
       });
       const data = await res.json();
-      if (data.status === "success" && data.emails?.length > 0) {
-        setEmails(data.emails);
-        sessionStorage.setItem(STORAGE_KEY, JSON.stringify(data.emails));
-        setGmailStatus((prev) => ({ ...prev, connected: true }));
-        showToast(`✓ Fetched ${data.emails.length} emails from Gmail`);
+      if (data.status === "success") {
+        if (data.emails?.length > 0) {
+          setEmails(data.emails);
+          sessionStorage.setItem(STORAGE_KEY, JSON.stringify(data.emails));
+          setGmailStatus((prev) => ({ ...prev, connected: true }));
+          showToast(`✓ Fetched ${data.emails.length} emails from Gmail`);
+        } else {
+          showToast("✓ Inbox synced — no new emails", "success");
+        }
       } else if (data.status === "gmail_not_connected") {
-        showToast("Gmail not connected — please connect first", "error");
+        if (data.emails?.length > 0) {
+          setEmails(data.emails);
+          sessionStorage.setItem(STORAGE_KEY, JSON.stringify(data.emails));
+        }
+        showToast("Gmail not connected — connect to see real emails", "error");
       } else if (data.status === "gmail_expired") {
         showToast("Gmail session expired — reconnecting…", "error");
         await connectGmail();
       } else {
-        showToast(data.detail || "No emails found", "error");
+        showToast(data.detail || "Sync failed", "error");
       }
     } catch {
       showToast("Sync failed — check connection", "error");
@@ -127,8 +135,11 @@ export default function Inbox() {
     router.push("/");
   };
 
-  const formatDate = (iso: string) => {
+  const formatDate = (iso: string | null | undefined, full = false) => {
+    if (!iso) return "";
     const d = new Date(iso);
+    if (isNaN(d.getTime())) return "";
+    if (full) return d.toLocaleString([], { dateStyle: "medium", timeStyle: "short" });
     const now = new Date();
     const diffDays = Math.floor((now.getTime() - d.getTime()) / 86400000);
     if (diffDays === 0) return d.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
@@ -137,14 +148,16 @@ export default function Inbox() {
     return d.toLocaleDateString([], { month: "short", day: "numeric" });
   };
 
-  const senderName = (sender: string) => {
+  const senderName = (sender: string | null | undefined) => {
+    if (!sender) return "Unknown";
     const match = sender.match(/^([^<]+)</);
     return match ? match[1].trim() : sender.split("@")[0];
   };
 
-  const senderInitial = (sender: string) => senderName(sender)[0]?.toUpperCase() ?? "?";
+  const senderInitial = (sender: string | null | undefined) => senderName(sender)[0]?.toUpperCase() ?? "?";
 
-  const avatarColor = (sender: string) => {
+  const avatarColor = (sender: string | null | undefined) => {
+    if (!sender) return "#4f7ef8";
     const colors = ["#4f7ef8", "#7c5af8", "#f85a8a", "#f8a24f", "#22c55e", "#06b6d4"];
     const i = sender.charCodeAt(0) % colors.length;
     return colors[i];
@@ -163,7 +176,7 @@ export default function Inbox() {
       {/* Toast */}
       {toast && (
         <div style={{ ...S.toast, background: toast.type === "error" ? "#2d1a1a" : "#0f2a1a", borderColor: toast.type === "error" ? "#7f1d1d" : "#14532d" }}>
-          <span style={{ color: toast.type === "error" ? "#fca5a5" : "#86efac" }}>{toast.msg}</span>
+          <span style={{ color: toast.type === "error" ? "#fca5a5" : "#86efac", fontSize: "13px" }}>{toast.msg}</span>
         </div>
       )}
 
@@ -287,7 +300,7 @@ export default function Inbox() {
                     <p style={S.detailEmail}>{selectedEmail.sender}</p>
                   </div>
                   <span style={S.detailDate}>
-                    {new Date(selectedEmail.received_at).toLocaleString([], { dateStyle: "medium", timeStyle: "short" })}
+                    {formatDate(selectedEmail.received_at, true)}
                   </span>
                 </div>
               </div>
@@ -301,7 +314,7 @@ export default function Inbox() {
                   id={`reply-btn-${selectedEmail.id}`}
                   onClick={() => {
                     sessionStorage.setItem("ai_agent_email_data", JSON.stringify(selectedEmail));
-                    router.push(`/reply/${selectedEmail.gmail_id || selectedEmail.id}`);
+                    router.push(`/reply?id=${selectedEmail.gmail_id || selectedEmail.id}`);
                   }}
                   style={S.replyBtn}
                   onMouseEnter={(e) => (e.currentTarget.style.background = "#5d8aff")}

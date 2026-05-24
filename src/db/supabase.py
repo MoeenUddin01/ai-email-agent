@@ -65,13 +65,13 @@ class SupabaseService:
         result = client.table("feedback").insert(feedback_data).execute()
         return result.data[0] if result.data else None
     
-    async def search_vectors(self, query_embedding: list, limit: int = 5) -> list:
+    async def search_vectors(self, query_embedding: list, limit: int = 5, match_threshold: float = 0.3) -> list:
         """Search knowledge vectors using similarity."""
         result = self.client.rpc(
             "match_documents",
             {
                 "query_embedding": query_embedding,
-                "match_threshold": 0.3,
+                "match_threshold": match_threshold,
                 "match_count": limit,
             }
         ).execute()

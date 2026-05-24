@@ -28,7 +28,7 @@ class GmailService:
         if credentials:
             self.service = build('gmail', 'v1', credentials=credentials)
 
-    def get_auth_url(self) -> str:
+    def get_auth_url(self, state: str = "") -> str:
         """Get Google OAuth authorization URL."""
         from urllib.parse import urlencode
         params = {
@@ -39,6 +39,8 @@ class GmailService:
             "access_type": "offline",
             "prompt": "consent",
         }
+        if state:
+            params["state"] = state
         return f"{self.AUTH_URI}?{urlencode(params)}"
 
     def exchange_code(self, code: str) -> Credentials:
@@ -122,24 +124,31 @@ class GmailService:
         }
 
     def _get_body(self, payload: dict) -> str:
-        """Extract text body from email payload."""
+        """Extract text body from email payload — handles nested multipart structures."""
         body = ""
 
         if 'parts' in payload:
             for part in payload['parts']:
-                if part['mimeType'] == 'text/plain':
-                    data = part['body'].get('data', '')
-                    if data:
-                        body = base64.urlsafe_b64decode(data).decode('utf-8')
-                        break
-                elif part['mimeType'] == 'multipart/alternative':
+                if 'parts' in part:
                     body = self._get_body(part)
                     if body:
-                        break
-        elif payload.get('mimeType') == 'text/plain':
+                        return body
+                elif part.get('mimeType') in ('text/plain', 'text/html'):
+                    data = part['body'].get('data', '')
+                    if data:
+                        try:
+                            body = base64.urlsafe_b64decode(data).decode('utf-8', errors='replace')
+                        except Exception:
+                            continue
+                        if part['mimeType'] == 'text/plain' or not body:
+                            return body
+        elif payload.get('mimeType') in ('text/plain', 'text/html'):
             data = payload['body'].get('data', '')
             if data:
-                body = base64.urlsafe_b64decode(data).decode('utf-8')
+                try:
+                    body = base64.urlsafe_b64decode(data).decode('utf-8', errors='replace')
+                except Exception:
+                    pass
 
         return body
 

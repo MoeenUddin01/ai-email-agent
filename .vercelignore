@@ -1,0 +1,11 @@
+.venv
+uv.lock
+.python-version
+.venv/
+__pycache__/
+*.pyc
+.git
+.github
+scratch/
+database/
+scripts/

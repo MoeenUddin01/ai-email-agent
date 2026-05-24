@@ -37,12 +37,12 @@ async def get_current_user_id(request: Request) -> str:
         raise HTTPException(status_code=401, detail="Not authenticated")
     
     token = auth_header.split(" ")[1]
-    payload = verify_token(token)
+    payload = await verify_token(token)
     
     if not payload:
         raise HTTPException(status_code=401, detail="Invalid token")
     
-    return payload["sub"]
+    return payload["id"]
 
 
 @router.post("/ingest")

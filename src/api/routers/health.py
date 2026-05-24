@@ -112,8 +112,11 @@ async def check_knowledge_base() -> Dict[str, Any]:
     """Check knowledge base status."""
     try:
         client = get_supabase_client()
-        result = client.table("knowledge_vectors").select("count").execute()
-        doc_count = len(result.data) if result.data else 0
+        result = client.table("knowledge_vectors").select("*", count="exact").limit(0).execute()
+        doc_count = getattr(result, 'count', None)
+        if doc_count is None:
+            result = client.table("knowledge_vectors").select("*", count="exact").execute()
+            doc_count = result.count if hasattr(result, 'count') else (len(result.data) if result.data else 0)
         
         return {
             "status": "healthy",
