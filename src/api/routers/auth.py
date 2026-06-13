@@ -276,16 +276,28 @@ async def store_gmail_credentials(request: Request):
                 "name": "",
             }).execute()
 
-        # Check existing credentials
+        # Preserve existing refresh_token if not provided
+        refresh_token = data.get("refresh_token")
+        if not refresh_token:
+            existing = supabase.table("gmail_credentials").select("refresh_token").eq("user_id", user_id).execute()
+            if existing.data:
+                refresh_token = existing.data[0].get("refresh_token")
+
+        scopes_raw = data.get("scopes")
+        if isinstance(scopes_raw, list):
+            scopes_val = " ".join(scopes_raw)
+        else:
+            scopes_val = scopes_raw or " ".join(GmailService.SCOPES)
+
         existing_creds = supabase.table("gmail_credentials").select("id").eq("user_id", user_id).execute()
         credential_data = {
             "user_id": user_id,
-            "access_token": credentials.token,
+            "access_token": data.get("access_token"),
             "refresh_token": refresh_token or "",
             "token_uri": "https://oauth2.googleapis.com/token",
-            "client_id": settings.GMAIL_CLIENT_ID,
-            "client_secret": settings.GMAIL_CLIENT_SECRET,
-            "scopes": " ".join(GmailService.SCOPES),
+            "client_id": data.get("client_id", settings.GMAIL_CLIENT_ID),
+            "client_secret": data.get("client_secret", settings.GMAIL_CLIENT_SECRET),
+            "scopes": scopes_val,
             "updated_at": datetime.now(timezone.utc).isoformat(),
         }
         existing_creds = supabase.table("gmail_credentials").select("id").eq("user_id", user_id).execute()
