@@ -28,7 +28,7 @@ class ComponentStatus(BaseModel):
     details: Dict[str, Any] = {}
 
 
-@router.get("/health", response_model=HealthResponse)
+@router.get("", response_model=HealthResponse)
 async def health_check():
     """Comprehensive health check of all system components."""
     start_time = time.time()

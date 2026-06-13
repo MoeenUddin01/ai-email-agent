@@ -62,7 +62,11 @@ app = FastAPI(
 # CORS middleware
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=[settings.FRONTEND_URL, "http://localhost:3000"],
+    allow_origins=[
+        settings.FRONTEND_URL,
+        "https://frontend-taupe-iota-69.vercel.app",
+        "http://localhost:3000",
+    ],
     allow_origin_regex=r"http://localhost:\d+",
     allow_credentials=True,
     allow_methods=["*"],
