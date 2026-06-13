@@ -346,7 +346,8 @@ async def exchange_gmail_code(request: Request):
 
     try:
         gmail_service = GmailService()
-        credentials = gmail_service.exchange_code(code)
+        # GIS popup uses 'postmessage' redirect_uri (not the server callback URL)
+        credentials = gmail_service.exchange_code(code, redirect_uri="postmessage")
 
         supabase = create_client(settings.SUPABASE_URL, settings.SUPABASE_SERVICE_KEY)
 

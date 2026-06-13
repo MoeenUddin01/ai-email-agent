@@ -51,8 +51,17 @@ class GmailService:
             params["state"] = state
         return f"{self.AUTH_URI}?{urlencode(params)}"
 
-    def exchange_code(self, code: str) -> Credentials:
-        """Exchange authorization code for credentials."""
+    def exchange_code(self, code: str, redirect_uri: str | None = None) -> Credentials:
+        """Exchange authorization code for credentials.
+        
+        Args:
+            code: The authorization code from Google.
+            redirect_uri: Must match the redirect_uri used when requesting the code.
+                Use 'postmessage' for GIS popup flows, or the server callback URL for redirect flows.
+                Defaults to settings.GMAIL_REDIRECT_URI.
+        """
+        if redirect_uri is None:
+            redirect_uri = settings.GMAIL_REDIRECT_URI
         import requests as sync_requests
         response = sync_requests.post(
             self.TOKEN_URI,
@@ -60,7 +69,7 @@ class GmailService:
                 "code": code,
                 "client_id": settings.GMAIL_CLIENT_ID,
                 "client_secret": settings.GMAIL_CLIENT_SECRET,
-                "redirect_uri": settings.GMAIL_REDIRECT_URI,
+                "redirect_uri": redirect_uri,
                 "grant_type": "authorization_code",
             },
         )
