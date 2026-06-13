@@ -100,7 +100,7 @@ class GmailService:
                 userId='me',
                 maxResults=max_results,
                 q=query,
-                labelIds=['INBOX', 'CATEGORY_PRIMARY']
+                labelIds=['INBOX']
             ).execute
         )
 
