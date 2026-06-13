@@ -58,6 +58,16 @@ export default function Inbox() {
   }, []);
 
   useEffect(() => {
+    if (typeof window !== 'undefined') {
+      const p = new URLSearchParams(window.location.search);
+      const g = p.get('gmail');
+      const m = p.get('msg');
+      if (g === 'connected') showToast('Gmail connected!', 'success');
+      else if (g === 'error') showToast(m ? `Gmail error: ${m}` : 'Gmail connection failed', 'error');
+    }
+  }, []);
+
+  useEffect(() => {
     const init = async () => {
       const { data: { session } } = await supabase.auth.getSession();
       if (!session) { router.push("/"); return; }
@@ -79,21 +89,69 @@ export default function Inbox() {
 
   const connectGmail = async () => {
     const token = await getToken();
-    if (!token) return;
-    const res = await fetch(`${process.env.NEXT_PUBLIC_BACKEND_URL}/auth/gmail`, {
-      headers: { Authorization: `Bearer ${token}` },
-    });
-    if (res.ok) {
-      const { auth_url } = await res.json();
-      window.location.href = auth_url;
-    } else {
-      showToast("Failed to start Gmail connection", "error");
+    if (!token) {
+      showToast("Session expired — please sign out and sign in again", "error");
+      return;
+    }
+
+    // Fetch Gmail client ID from the backend (single source of truth)
+    let clientId: string;
+    try {
+      const ciRes = await fetch(`${process.env.NEXT_PUBLIC_BACKEND_URL}/auth/gmail/client-id`);
+      const ciData = await ciRes.json();
+      clientId = ciData.client_id;
+      if (!clientId) throw new Error("No client_id in response");
+    } catch (e) {
+      showToast(`Failed to get Gmail config: ${(e as Error).message}`, "error");
+      return;
+    }
+
+    // Use Google Identity Services (GIS) popup-based OAuth.
+    // Google returns the auth code directly to this JavaScript callback — no redirect needed.
+    try {
+      const gisCodeClient = google.accounts.oauth2.initCodeClient({
+        client_id: clientId,
+        scope: "https://www.googleapis.com/auth/gmail.readonly https://www.googleapis.com/auth/gmail.send https://www.googleapis.com/auth/gmail.modify",
+        callback: async (response: any) => {
+          if (response.code) {
+            const resp = await fetch(`${process.env.NEXT_PUBLIC_BACKEND_URL}/auth/gmail/exchange`, {
+              method: "POST",
+              headers: {
+                Authorization: `Bearer ${token}`,
+                "Content-Type": "application/json",
+              },
+              body: JSON.stringify({ code: response.code }),
+            });
+            if (resp.ok) {
+              setGmailStatus({ connected: true });
+              showToast("Gmail connected!", "success");
+              if (window.location.search.includes("gmail=")) {
+                window.history.replaceState({}, "", "/inbox");
+              }
+            } else {
+              const errText = await resp.text();
+              showToast(`Gmail connect failed: ${errText.slice(0, 80)}`, "error");
+            }
+          } else if (response.error) {
+            showToast(`Authorization cancelled or failed: ${response.error}`, "error");
+          }
+        },
+        error_callback: (error: any) => {
+          showToast(`Google auth error: ${error?.message || error?.type || "unknown"}`, "error");
+        },
+      });
+      gisCodeClient.requestCode();
+    } catch (e) {
+      showToast(`Failed to start Gmail auth: ${(e as Error).message}`, "error");
     }
   };
 
   const syncEmails = async () => {
     const token = await getToken();
-    if (!token) return;
+    if (!token) {
+      showToast("Session expired — please sign out and sign in again", "error");
+      return;
+    }
     setSyncing(true);
     try {
       const res = await fetch(`${process.env.NEXT_PUBLIC_BACKEND_URL}/emails/sync`, {
@@ -111,16 +169,11 @@ export default function Inbox() {
           showToast("✓ Inbox synced — no new emails", "success");
         }
       } else if (data.status === "gmail_not_connected") {
-        if (data.emails?.length > 0) {
-          setEmails(data.emails);
-          sessionStorage.setItem(STORAGE_KEY, JSON.stringify(data.emails));
-        }
-        showToast("Gmail not connected — connect to see real emails", "error");
-      } else if (data.status === "gmail_expired") {
-        showToast("Gmail session expired — reconnecting…", "error");
-        await connectGmail();
+        showToast("Please click \"Connect Gmail\" first to authorize Gmail access", "error");
       } else {
         showToast(data.detail || "Sync failed", "error");
+        setSyncing(false);
+        return;
       }
     } catch {
       showToast("Sync failed — check connection", "error");

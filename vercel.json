@@ -17,9 +17,7 @@
     }
   ],
   "routes": [
-    { "src": "/auth/gmail$", "dest": "api/index.py" },
-    { "src": "/auth/gmail/callback", "dest": "api/index.py" },
-    { "src": "/auth/gmail/store-credentials", "dest": "api/index.py" },
+    { "src": "/auth/gmail(/.*)?", "dest": "api/index.py" },
     { "src": "/auth/me", "dest": "api/index.py" },
     { "src": "/emails(/.*)?", "dest": "api/index.py" },
     { "src": "/drafts(/.*)?", "dest": "api/index.py" },

@@ -17,6 +17,9 @@ export default function RootLayout({
 }) {
   return (
     <html lang="en" className={inter.variable}>
+      <head>
+        <script src="https://accounts.google.com/gsi/client" async defer />
+      </head>
       <body style={{ minHeight: "100vh", background: "#0d0f14" }}>
         <TooltipProvider>{children}</TooltipProvider>
       </body>

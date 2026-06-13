@@ -5,7 +5,6 @@ import asyncio
 from typing import List, Optional
 from datetime import datetime
 from google.oauth2.credentials import Credentials
-from googleapiclient.discovery import build
 
 from src.api.config import settings
 
@@ -21,12 +20,21 @@ class GmailService:
 
     AUTH_URI = "https://accounts.google.com/o/oauth2/auth"
     TOKEN_URI = "https://oauth2.googleapis.com/token"
+    _google_build = None
+
+    @staticmethod
+    def _get_build():
+        """Lazy-import googleapiclient (heavy) only when needed."""
+        if GmailService._google_build is None:
+            from googleapiclient.discovery import build as _b
+            GmailService._google_build = _b
+        return GmailService._google_build
 
     def __init__(self, credentials: Optional[Credentials] = None):
         self.credentials = credentials
         self.service = None
         if credentials:
-            self.service = build('gmail', 'v1', credentials=credentials)
+            self.service = self._get_build()('gmail', 'v1', credentials=credentials)
 
     def get_auth_url(self, state: str = "") -> str:
         """Get Google OAuth authorization URL."""
