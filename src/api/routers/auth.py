@@ -206,7 +206,7 @@ async def gmail_callback(code: str, state: Optional[str] = None, error: Optional
             "token_uri": "https://oauth2.googleapis.com/token",
             "client_id": settings.GMAIL_CLIENT_ID,
             "client_secret": settings.GMAIL_CLIENT_SECRET,
-            "scopes": GmailService.SCOPES,
+            "scopes": " ".join(GmailService.SCOPES),
             "updated_at": datetime.now(timezone.utc).isoformat(),
         }
 
@@ -280,15 +280,15 @@ async def store_gmail_credentials(request: Request):
         existing_creds = supabase.table("gmail_credentials").select("id").eq("user_id", user_id).execute()
         credential_data = {
             "user_id": user_id,
-            "access_token": data.get("access_token"),
-            "refresh_token": data.get("refresh_token"),
+            "access_token": credentials.token,
+            "refresh_token": refresh_token or "",
             "token_uri": "https://oauth2.googleapis.com/token",
-            "client_id": data.get("client_id", settings.GMAIL_CLIENT_ID),
-            "client_secret": data.get("client_secret", settings.GMAIL_CLIENT_SECRET),
-            "scopes": GmailService.SCOPES,
+            "client_id": settings.GMAIL_CLIENT_ID,
+            "client_secret": settings.GMAIL_CLIENT_SECRET,
+            "scopes": " ".join(GmailService.SCOPES),
             "updated_at": datetime.now(timezone.utc).isoformat(),
         }
-
+        existing_creds = supabase.table("gmail_credentials").select("id").eq("user_id", user_id).execute()
         if existing_creds.data:
             supabase.table("gmail_credentials").update(credential_data).eq("user_id", user_id).execute()
         else:
@@ -372,7 +372,7 @@ async def exchange_gmail_code(request: Request):
             "token_uri": "https://oauth2.googleapis.com/token",
             "client_id": settings.GMAIL_CLIENT_ID,
             "client_secret": settings.GMAIL_CLIENT_SECRET,
-            "scopes": GmailService.SCOPES,
+            "scopes": " ".join(GmailService.SCOPES),
             "updated_at": datetime.now(timezone.utc).isoformat(),
         }
 

@@ -143,13 +143,21 @@ async def sync_emails(request: Request):
     # Credentials exist — try to fetch real emails
     try:
         creds_data = credentials_result.data
+        raw_scopes = creds_data.get("scopes", GmailService.SCOPES)
+        if isinstance(raw_scopes, str):
+            scopes_list = [s for s in raw_scopes.split() if s.startswith("https://") or s.startswith("http://")]
+        elif isinstance(raw_scopes, list):
+            scopes_list = raw_scopes
+        else:
+            scopes_list = GmailService.SCOPES
+
         credentials = Credentials(
             token=creds_data["access_token"],
             refresh_token=creds_data["refresh_token"],
             token_uri=creds_data.get("token_uri", "https://oauth2.googleapis.com/token"),
             client_id=creds_data["client_id"],
             client_secret=creds_data["client_secret"],
-            scopes=creds_data.get("scopes", GmailService.SCOPES)
+            scopes=scopes_list
         )
 
         gmail_service = GmailService(credentials)

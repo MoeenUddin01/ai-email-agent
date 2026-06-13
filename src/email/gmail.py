@@ -90,8 +90,8 @@ class GmailService:
         loop = asyncio.get_running_loop()
         return await loop.run_in_executor(None, lambda: func(*args, **kwargs))
 
-    async def fetch_emails(self, max_results: int = 50, query: str = "label:inbox") -> List[dict]:
-        """Fetch emails from Gmail (non-blocking)."""
+    async def fetch_emails(self, max_results: int = 50, query: str = "category:primary") -> List[dict]:
+        """Fetch emails from Gmail Primary inbox (non-blocking)."""
         if not self.service:
             raise ValueError("Gmail service not authenticated")
 
@@ -100,7 +100,7 @@ class GmailService:
                 userId='me',
                 maxResults=max_results,
                 q=query,
-                labelIds=['INBOX']
+                labelIds=['INBOX', 'CATEGORY_PRIMARY']
             ).execute
         )
 
