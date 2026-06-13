@@ -227,3 +227,4 @@ __marimo__/
 .vercel
 .env.vercel
 supabase/
+.env-check*
